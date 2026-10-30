@@ -1,0 +1,100 @@
+package app.jfago
+
+import android.util.Base64
+import org.json.JSONArray
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+
+class Api(server: String) {
+    val base = server.trim().trimEnd('/')
+    var token = ""
+
+    private fun call(method: String, path: String, body: JSONObject? = null, basic: String? = null): String {
+        val c = URL(base + path).openConnection() as HttpURLConnection
+        c.requestMethod = method
+        c.connectTimeout = 15000; c.readTimeout = 30000
+        if (basic != null) c.setRequestProperty("Authorization", "Basic $basic")
+        else c.setRequestProperty("Authorization", "Bearer $token")
+        if (body != null) {
+            c.setRequestProperty("Content-Type", "application/json")
+            c.doOutput = true
+            c.outputStream.use { it.write(body.toString().toByteArray()) }
+        }
+        val code = c.responseCode
+        val text = (if (code < 400) c.inputStream else c.errorStream)?.bufferedReader()?.readText() ?: ""
+        if (code >= 400) throw Exception("HTTP $code ${text.take(120)}")
+        return text
+    }
+
+    fun login(user: String, pass: String) {
+        val b = Base64.encodeToString("$user:$pass".toByteArray(), Base64.NO_WRAP)
+        token = JSONObject(call("GET", "/token/login", basic = b)).getString("token")
+    }
+
+    private fun list(text: String, key: String): JSONArray =
+        if (text.trim().startsWith("[")) JSONArray(text) else JSONObject(text).optJSONArray(key) ?: JSONArray()
+
+    fun users(): List<JSONObject> {
+        val a = list(call("GET", "/users"), "users")
+        return (0 until a.length()).map { a.getJSONObject(it) }
+    }
+
+    fun invites(): List<JSONObject> {
+        val a = list(call("GET", "/invites"), "invites")
+        return (0 until a.length()).map { a.getJSONObject(it) }
+    }
+
+    fun setEnabled(id: String, enabled: Boolean) {
+        call("POST", "/users/enable", JSONObject().put("users", JSONArray().put(id)).put("enabled", enabled).put("notify", false))
+    }
+
+    fun deleteUser(id: String) {
+        call("DELETE", "/users", JSONObject().put("users", JSONArray().put(id)).put("notify", false))
+    }
+
+    fun createInvite(days: Int, uses: Int, sendTo: String = "", profile: String = "") {
+        val o = JSONObject().put("days", days).put("hours", 0).put("minutes", 0)
+            .put("multiple-uses", uses > 1).put("no-limit", false).put("remaining-uses", uses)
+        if (sendTo.isNotBlank()) o.put("send-to", sendTo.trim())
+        if (profile.isNotBlank()) o.put("profile", profile)
+        call("POST", "/invites", o)
+    }
+
+    fun activity(): List<JSONObject> {
+        val a = list(call("GET", "/activity"), "activities")
+        return (0 until a.length()).map { a.getJSONObject(it) }
+    }
+
+    fun deleteActivity(id: String) { call("DELETE", "/activity/$id") }
+
+    fun announce(ids: List<String>, subject: String, message: String) {
+        call("POST", "/users/announce", JSONObject().put("users", JSONArray(ids)).put("subject", subject).put("message", message))
+    }
+
+    fun createUser(name: String, pass: String, email: String, profile: String = "") {
+        val o = JSONObject().put("username", name).put("password", pass).put("email", email)
+        if (profile.isNotBlank()) o.put("profile", profile)
+        call("POST", "/user", o)
+    }
+
+    fun profiles(): List<String> {
+        val p = JSONObject(call("GET", "/profiles")).optJSONObject("profiles") ?: return emptyList()
+        return p.keys().asSequence().toList()
+    }
+
+    fun config(): JSONObject = JSONObject(call("GET", "/config"))
+
+    fun setConfig(section: String, key: String, value: Any) {
+        call("POST", "/config", JSONObject().put(section, JSONObject().put(key, value)))
+    }
+
+    fun setExpiry(id: String, days: Int) {
+        call("POST", "/users/expiry", JSONObject().put("users", JSONArray().put(id)).put("months", 0)
+            .put("days", days).put("hours", 0).put("minutes", 0).put("notify", false))
+    }
+
+    fun deleteInvite(code: String) {
+        call("DELETE", "/invites", JSONObject().put("code", code))
+    }
+}
