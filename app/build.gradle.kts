@@ -13,8 +13,8 @@ android {
         applicationId = "app.jfago"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2
-        versionName = "2.0.0"
+        versionCode = 3
+        versionName = "2.0.1"
     }
 
     buildFeatures { compose = true }
