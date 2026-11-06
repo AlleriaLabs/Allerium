@@ -224,7 +224,8 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     }
     LaunchedEffect(servers) { servers.forEach { s -> launch(Dispatchers.IO) {
         online[s.url] = try { (URL(s.url).openConnection() as HttpURLConnection).run { connectTimeout = 4000; readTimeout = 4000; responseCode; true } } catch (e: Exception) { false } } } }
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Box(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 88.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Header("Your secure JFA-GO workspace") }
         if (authenticating) item { Text("Connecting securely…", color = Cyan, fontSize = 11.sp) }
         if (authError.isNotBlank()) item { Text(authError, color = Color(0xFFFF8A8A), fontSize = 11.sp) }
@@ -276,7 +277,16 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             }
             }
         }
-        item { RedBtn("Add server", icon = Icons.Default.Add) { adding = true }; Spacer(Modifier.height(24.dp)) }
+    }
+    Row(Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 24.dp)
+        .clip(RoundedCornerShape(50)).background(Red)
+        .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(50))
+        .clickable { adding = true }.padding(horizontal = 18.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.Add, contentDescription = "Add server", tint = Color.White, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Add server", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+    }
     }
     if (adding || editing != null) {
         val old = editing
