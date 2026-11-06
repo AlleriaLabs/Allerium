@@ -472,7 +472,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 }
             }
         }
-        item { TextButton(back) { Text("Switch server", color = Dim) }; Spacer(Modifier.height(24.dp)) }
+        item { Spacer(Modifier.height(24.dp)) }
     }
     Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(CardC)) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
