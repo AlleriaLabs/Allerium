@@ -35,8 +35,14 @@ import java.net.URL
 import java.text.DateFormat
 import java.util.Date
 
-val Bg = Color(0xFF141414); val CardC = Color(0xFF1F1F1F); val Line = Color(0xFF333333)
-val Red = Color(0xFFE50914); val Dim = Color(0xFFB3B3B3); val Green = Color(0xFF4CD964); val PillC = Color(0xFF2A2A2C)
+val Bg = Color(0xFF080B16)
+val CardC = Color(0xFF11182A)
+val Line = Color(0xFF26334D)
+val Red = Color(0xFF9B72FF)
+val Cyan = Color(0xFF39D5F2)
+val Dim = Color(0xFF9AA8C3)
+val Green = Color(0xFF43D9A3)
+val PillC = Color(0xFF1C2740)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,41 +57,57 @@ class MainActivity : ComponentActivity() {
 data class Srv(val name: String, val url: String, val user: String)
 
 @Composable fun JCard(m: Modifier = Modifier, c: @Composable ColumnScope.() -> Unit) =
-    Column(m.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(CardC)
-        .border(1.dp, Line, RoundedCornerShape(28.dp)).padding(20.dp), content = c)
+    Column(m.fillMaxWidth().clip(RoundedCornerShape(24.dp))
+        .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF17223A), CardC, Color(0xFF101727))))
+        .border(1.dp, Line.copy(alpha = 0.8f), RoundedCornerShape(24.dp))
+        .padding(20.dp), content = c)
 
 @Composable fun Bar(f: Float, m: Modifier = Modifier) =
-    Box(m.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(Line)) {
-        Box(Modifier.fillMaxWidth(f.coerceIn(0.03f, 1f)).fillMaxHeight().background(Red))
+    Box(m.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(8.dp)).background(Line)) {
+        Box(Modifier.fillMaxWidth(f.coerceIn(0.03f, 1f)).fillMaxHeight()
+            .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Red, Cyan))))
     }
 
 @Composable fun Pill(t: String, dot: Color? = null) =
-    Row(Modifier.clip(RoundedCornerShape(50)).background(PillC).padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        if (dot != null) { Box(Modifier.size(10.dp).clip(CircleShape).background(dot)); Spacer(Modifier.width(8.dp)) }
-        Text(t, fontSize = 14.sp)
+    Row(Modifier.clip(RoundedCornerShape(50)).background(PillC).border(1.dp, Line, RoundedCornerShape(50))
+        .padding(horizontal = 13.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (dot != null) { Box(Modifier.size(8.dp).clip(CircleShape).background(dot)); Spacer(Modifier.width(8.dp)) }
+        Text(t, fontSize = 12.sp, color = Color(0xFFE4EAF8), fontWeight = FontWeight.Medium)
     }
 
 @Composable fun RedBtn(t: String, enabled: Boolean = true, on: () -> Unit) =
-    Button(on, Modifier.fillMaxWidth().height(56.dp), enabled, shape = RoundedCornerShape(24.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Red, contentColor = Color.White)) { Text(t, fontSize = 18.sp) }
+    Box(Modifier.fillMaxWidth().height(54.dp).clip(RoundedCornerShape(17.dp))
+        .background(if (enabled) androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Red, Color(0xFF6F8CFF), Cyan)) else androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Line, Line)))
+        .clickable(enabled = enabled, onClick = on), contentAlignment = Alignment.Center) {
+        Text(t, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+    }
 
 @Composable fun Field(v: String, on: (String) -> Unit, label: String, pw: Boolean = false) =
     OutlinedTextField(v, on, Modifier.fillMaxWidth().padding(vertical = 4.dp), label = { Text(label) }, singleLine = true,
         shape = RoundedCornerShape(16.dp), visualTransformation = if (pw) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Red, focusedLabelColor = Red, unfocusedBorderColor = Line, cursorColor = Red))
 
-@Composable fun Header(sub: String) = Column(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 12.dp)) {
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Color(0xFF0A0A0A))
-        .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Red.copy(alpha = 0.28f), Color.Transparent, Red.copy(alpha = 0.18f))))) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.logo), null, Modifier.size(56.dp))
-            Spacer(Modifier.width(14.dp))
-            Text("ALPASS", color = Red, fontSize = 28.sp, letterSpacing = 8.sp, fontWeight = FontWeight.Medium)
+@Composable fun Header(sub: String) = Column(Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 10.dp)) {
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
+        .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF202044), Color(0xFF10283B), Color(0xFF11182A))))
+        .border(1.dp, Line, RoundedCornerShape(24.dp))) {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.allerium_mark), null, Modifier.size(54.dp))
+                Spacer(Modifier.width(14.dp))
+                Column {
+                    Text("ALLERIUM", color = Color.White, fontSize = 23.sp, letterSpacing = 4.sp, fontWeight = FontWeight.Bold)
+                    Text("BY ALLERIA LABS", color = Cyan, fontSize = 9.sp, letterSpacing = 2.2.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.size(9.dp).clip(CircleShape).background(Cyan))
+            }
+            Spacer(Modifier.height(17.dp))
+            Text(sub.uppercase(), color = Dim, fontSize = 11.sp, letterSpacing = 2.1.sp, fontWeight = FontWeight.Medium)
         }
-        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.dp).background(Red))
+        Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(0.42f).height(2.dp)
+            .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Red, Cyan, Color.Transparent))))
     }
-    Text(sub.uppercase(), color = Dim, fontSize = 12.sp, letterSpacing = 3.sp, modifier = Modifier.padding(top = 10.dp, start = 4.dp))
 }
 
 @Composable fun Chips(opts: List<String>, sel: String, on: (String) -> Unit) {
