@@ -50,14 +50,14 @@ import java.text.DateFormat
 import java.util.Date
 
 // Shared Allerion visual language: charcoal surfaces, crisp white type, restrained red accent.
-val Bg = Color(0xFF101113)
-val CardC = Color(0xFF191A1E)
-val Line = Color(0xFF303136)
-val Red = Color(0xFFE50914)
-val Cyan = Color(0xFFF5F5F5)
-val Dim = Color(0xFF929398)
-val Green = Color(0xFF35C98A)
-val PillC = Color(0xFF242529)
+val Bg = Color(0xFF080B16)
+val CardC = Color(0xFF11182A)
+val Line = Color(0xFF26334D)
+val Red = Color(0xFF9B72FF)
+val Cyan = Color(0xFF39D5F2)
+val Dim = Color(0xFF9AA8C3)
+val Green = Color(0xFF43D9A3)
+val PillC = Color(0xFF1C2740)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -83,7 +83,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
 
 @Composable fun JCard(m: Modifier = Modifier, c: @Composable ColumnScope.() -> Unit) =
     Column(m.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-        .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF202124), CardC, Color(0xFF151619))))
+        .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF17223A), CardC, Color(0xFF101727))))
         .border(1.dp, Line, RoundedCornerShape(20.dp))
         .animateContentSize(animationSpec = tween(240)).padding(15.dp), content = c)
 
@@ -91,7 +91,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     val transition = rememberInfiniteTransition(label = "serverCardGlow")
     val phase by transition.animateFloat(0f, 1f, animationSpec = infiniteRepeatable(tween(5200), repeatMode = RepeatMode.Reverse), label = "serverCardPhase")
     val brush = androidx.compose.ui.graphics.Brush.linearGradient(
-        colors = listOf(Color(0xFF252629), Color(0xFF191A1E).copy(alpha = 0.92f + phase * 0.05f), Color(0xFF211719)),
+        colors = listOf(Color(0xFF17223A), Color(0xFF17223A).copy(alpha = 0.92f + phase * 0.05f), Color(0xFF10243A)),
         start = Offset(phase * 360f, 0f), end = Offset(620f, 520f))
     Column(m.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(brush)
         .border(1.dp, Red.copy(alpha = 0.12f + phase * 0.08f), RoundedCornerShape(22.dp))
@@ -252,7 +252,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             AnimatedServerCard(Modifier.clickable(enabled = !authenticating) { selectServer(s) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(48.dp).clip(RoundedCornerShape(15.dp))
-                        .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Red, Color(0xFF8E080F)))),
+                        .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Red, Color(0xFF168DAA)))),
                         contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.Dns, null, tint = Color.White, modifier = Modifier.size(24.dp))
                     }
