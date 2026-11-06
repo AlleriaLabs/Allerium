@@ -103,13 +103,27 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     val count by animateIntAsState(value, animationSpec = tween(700), label = "statCount-$label")
     val brush = androidx.compose.ui.graphics.Brush.linearGradient(
         colors = listOf(tint.copy(alpha = 0.15f + phase * 0.09f), CardC, tint.copy(alpha = 0.07f + phase * 0.06f)),
-        start = Offset(phase * 240f, 0f), end = Offset(400f, 360f))
-    Column(modifier.height(112.dp).clip(RoundedCornerShape(20.dp))
-        .background(brush).border(1.dp, tint.copy(alpha = 0.18f + phase * 0.18f), RoundedCornerShape(24.dp))
-        .padding(horizontal = 11.dp, vertical = 9.dp), verticalArrangement = Arrangement.Center) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Box(Modifier.size(28.dp).clip(RoundedCornerShape(11.dp)).background(tint.copy(alpha = 0.16f + phase * 0.08f)), contentAlignment = Alignment.Center) {
-            Icon(glyph, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+        start = Offset(phase * 240f, 0f), end = Offset(400f, 360f)
+    )
+    Column(
+        modifier.height(112.dp).clip(RoundedCornerShape(20.dp))
+            .background(brush)
+            .border(1.dp, tint.copy(alpha = 0.18f + phase * 0.18f), RoundedCornerShape(20.dp))
+            .padding(horizontal = 11.dp, vertical = 9.dp),
+        verticalArrangement = Arrangement.Center
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Box(
+                Modifier.size(28.dp).clip(RoundedCornerShape(9.dp))
+                    .background(tint.copy(alpha = 0.16f + phase * 0.08f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(glyph, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+            }
             Text("$count", fontSize = 25.sp, fontWeight = FontWeight.Bold, color = Color.White)
         }
         Spacer(Modifier.height(7.dp))
