@@ -5,6 +5,12 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -56,7 +63,7 @@ class MainActivity : ComponentActivity() {
 
 data class Srv(val name: String, val url: String, val user: String)
 
-@Composable private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
+private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     val masterKey = androidx.security.crypto.MasterKey.Builder(ctx)
         .setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM).build()
     return androidx.security.crypto.EncryptedSharedPreferences.create(
@@ -70,7 +77,7 @@ data class Srv(val name: String, val url: String, val user: String)
     Column(m.fillMaxWidth().clip(RoundedCornerShape(24.dp))
         .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF17223A), CardC, Color(0xFF101727))))
         .border(1.dp, Line.copy(alpha = 0.8f), RoundedCornerShape(24.dp))
-        .padding(20.dp), content = c)
+        .animateContentSize(animationSpec = tween(240)).padding(18.dp), content = c)
 
 @Composable fun Bar(f: Float, m: Modifier = Modifier) =
     Box(m.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(8.dp)).background(Line)) {
@@ -85,11 +92,13 @@ data class Srv(val name: String, val url: String, val user: String)
         Text(t, fontSize = 10.sp, color = Color(0xFFE4EAF8), fontWeight = FontWeight.Medium)
     }
 
-@Composable fun RedBtn(t: String, enabled: Boolean = true, on: () -> Unit) =
-    Box(Modifier.fillMaxWidth().height(54.dp).clip(RoundedCornerShape(17.dp))
-        .background(if (enabled) androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Red, Color(0xFF6F8CFF), Cyan)) else androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Line, Line)))
-        .clickable(enabled = enabled, onClick = on), contentAlignment = Alignment.Center) {
-        Text(t, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+@Composable fun RedBtn(t: String, enabled: Boolean = true, icon: ImageVector? = null, on: () -> Unit) =
+    Row(Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(16.dp))
+        .background(if (enabled) androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color(0xFF7458D6), Color(0xFF416DCE), Color(0xFF168DAA))) else androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Line, Line)))
+        .clickable(enabled = enabled, onClick = on).padding(horizontal = 18.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+        if (icon != null) { Icon(icon, null, tint = Color.White, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(9.dp)) }
+        Text(t, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
     }
 
 @Composable fun Field(v: String, on: (String) -> Unit, label: String, pw: Boolean = false) =
@@ -186,6 +195,7 @@ data class Srv(val name: String, val url: String, val user: String)
             }
         }
         items(servers) { s ->
+            AnimatedVisibility(visible = true, enter = fadeIn(tween(320)) + slideInVertically(tween(320)) { it / 5 }) {
             JCard(Modifier.clickable(enabled = !authenticating) { selectServer(s) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(48.dp).clip(RoundedCornerShape(15.dp))
@@ -196,7 +206,7 @@ data class Srv(val name: String, val url: String, val user: String)
                     Spacer(Modifier.width(13.dp))
                     Column(Modifier.weight(1f)) {
                         Text(s.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-                        Text(s.url, color = Dim, fontSize = 10.sp, maxLines = 1)
+                        Text(s.url, color = Dim, fontSize = 11.sp, maxLines = 1)
                         Spacer(Modifier.height(8.dp))
                         val o = online[s.url]
                         Pill(if (o == null) "Checking connection" else if (o) "Server online" else "Unavailable",
@@ -206,13 +216,14 @@ data class Srv(val name: String, val url: String, val user: String)
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Sign in to manage", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Open server workspace", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.weight(1f))
                     Icon(Icons.Default.ArrowForward, null, tint = Cyan, modifier = Modifier.size(18.dp))
                 }
             }
+            }
         }
-        item { RedBtn("Add server") { adding = true }; Spacer(Modifier.height(24.dp)) }
+        item { RedBtn("Add server", icon = Icons.Default.Add) { adding = true }; Spacer(Modifier.height(24.dp)) }
     }
     if (adding || editing != null) {
         val old = editing
@@ -287,8 +298,12 @@ data class Srv(val name: String, val url: String, val user: String)
                     Triple("INVITATIONS", invites.size, Cyan),
                     Triple("DISABLED", off, Color(0xFFFFB86B))).forEach { (label, value, tint) ->
                     JCard(Modifier.weight(1f)) {
-                        Box(Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).background(tint.copy(alpha = .15f)), contentAlignment = Alignment.Center) {
-                            Box(Modifier.size(9.dp).clip(CircleShape).background(tint))
+                        Box(Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(tint.copy(alpha = .13f)), contentAlignment = Alignment.Center) {
+                            Icon(when (label) {
+                                "TOTAL USERS" -> Icons.Default.Groups
+                                "INVITATIONS" -> Icons.Default.ConfirmationNumber
+                                else -> Icons.Default.Block
+                            }, contentDescription = null, tint = tint, modifier = Modifier.size(17.dp))
                         }
                         Spacer(Modifier.height(13.dp))
                         Text("$value", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
@@ -302,7 +317,7 @@ data class Srv(val name: String, val url: String, val user: String)
                 Column(Modifier.weight(1f)) {
                     Text(if (tab == 0) "Directory" else listOf("Directory", "Invitations", "Activity", "Settings")[tab],
                         fontSize = 21.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Text("Manage your JFA-GO server", color = Dim, fontSize = 10.sp)
+                    Text("Manage your JFA-GO server", color = Dim, fontSize = 12.sp)
                 }
                 IconButton({ refresh() }, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PillC)) {
                     Icon(Icons.Default.Refresh, "Refresh", tint = Cyan)
@@ -313,19 +328,28 @@ data class Srv(val name: String, val url: String, val user: String)
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFF0D1424))
                 .border(1.dp, Line, RoundedCornerShape(18.dp)).padding(5.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf("Users", "Invites", "Activity", "Settings").forEachIndexed { i, t ->
+                listOf(
+                    Triple("Users", Icons.Default.People, 0),
+                    Triple("Invites", Icons.Default.ConfirmationNumber, 1),
+                    Triple("Activity", Icons.Default.Timeline, 2),
+                    Triple("Settings", Icons.Default.Tune, 3)
+                ).forEach { (label, glyph, index) ->
+                    val selectedTint by animateColorAsState(if (tab == index) Color.White else Dim, tween(220), label = "navTint$index")
                     Box(Modifier.weight(1f).clip(RoundedCornerShape(13.dp))
-                        .background(if (tab == i) Color(0xFF293454) else Color.Transparent)
-                        .clickable { tab = i }.padding(vertical = 11.dp), contentAlignment = Alignment.Center) {
-                        Text(t, fontSize = 10.sp, fontWeight = if (tab == i) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (tab == i) Color.White else Dim, maxLines = 1)
+                        .background(if (tab == index) Color(0xFF293454) else Color.Transparent)
+                        .clickable { tab = index }.padding(vertical = 9.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Icon(glyph, contentDescription = label, tint = selectedTint, modifier = Modifier.size(17.dp))
+                            Text(label, fontSize = 10.sp, fontWeight = if (tab == index) FontWeight.SemiBold else FontWeight.Normal,
+                                color = selectedTint, maxLines = 1)
+                        }
                     }
                 }
             }
         }
         if (msg.isNotEmpty()) item { Text(msg, color = Red) }
         if (tab == 0) {
-            item { RedBtn("New user") { dlg = "user" } }
+            item { RedBtn("Create user", icon = Icons.Default.PersonAdd) { dlg = "user" } }
             item { OutlinedButton({ dlg = "announce" }, Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(24.dp)) { Text("Announce to ${shown.size} shown", color = Red) } }
             item { Field(q, { q = it }, "Search users") }
             items(shown) { u ->
@@ -375,7 +399,7 @@ data class Srv(val name: String, val url: String, val user: String)
                 }
             }
         } else if (tab == 1) {
-            item { RedBtn("New invite") { dlg = "invite" } }
+            item { RedBtn("Create invitation", icon = Icons.Default.AddLink) { dlg = "invite" } }
             items(invites) { i ->
                 val code = i.optString("code")
                 JCard {
@@ -387,7 +411,7 @@ data class Srv(val name: String, val url: String, val user: String)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(code, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-                            Text("Uses remaining · " + i.optString("remaining-uses").ifEmpty { "Unlimited" }, color = Dim, fontSize = 10.sp)
+                            Text("Uses remaining · " + i.optString("remaining-uses").ifEmpty { "Unlimited" }, color = Dim, fontSize = 12.sp)
                         }
                         IconButton({ (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("invite", "${api.base}/invite/$code")) }) {
                             Icon(Icons.Default.ContentCopy, "Copy invite link", tint = Cyan)
