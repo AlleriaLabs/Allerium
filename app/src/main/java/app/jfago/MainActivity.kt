@@ -202,13 +202,48 @@ data class Srv(val name: String, val url: String, val user: String)
 
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Header(s.name) }
-        item { JCard { Row {
-            listOf(Triple("Users", users.size, users.size), Triple("Invites", invites.size, maxOf(invites.size, 10)), Triple("Disabled", off, maxOf(users.size, 1))).forEach { (l, v, t) ->
-                Column(Modifier.weight(1f).padding(end = 10.dp)) { Text(l, color = Dim); Text("$v", fontSize = 34.sp); Spacer(Modifier.height(8.dp)); Bar(if (t == 0) 0f else v.toFloat() / t) } } } } }
-        item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            listOf("Users", "Invites", "Activity", "Settings").forEachIndexed { i, t ->
-                Box(Modifier.clip(RoundedCornerShape(50)).background(if (tab == i) Red else PillC).clickable { tab = i }.padding(horizontal = 13.dp, vertical = 10.dp)) { Text(t, fontSize = 14.sp) } }
-            Spacer(Modifier.weight(1f)); IconButton({ refresh() }) { Icon(Icons.Default.Refresh, "Refresh", tint = Red) } } }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf(Triple("TOTAL USERS", users.size, Color(0xFF9B72FF)),
+                    Triple("INVITATIONS", invites.size, Cyan),
+                    Triple("DISABLED", off, Color(0xFFFFB86B))).forEach { (label, value, tint) ->
+                    JCard(Modifier.weight(1f)) {
+                        Box(Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).background(tint.copy(alpha = .15f)), contentAlignment = Alignment.Center) {
+                            Box(Modifier.size(9.dp).clip(CircleShape).background(tint))
+                        }
+                        Spacer(Modifier.height(13.dp))
+                        Text("$value", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(label, fontSize = 9.sp, color = Dim, letterSpacing = 1.sp, maxLines = 1)
+                    }
+                }
+            }
+        }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(if (tab == 0) "Directory" else listOf("Directory", "Invitations", "Activity", "Settings")[tab],
+                        fontSize = 25.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("Manage your JFA-GO server", color = Dim, fontSize = 12.sp)
+                }
+                IconButton({ refresh() }, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PillC)) {
+                    Icon(Icons.Default.Refresh, "Refresh", tint = Cyan)
+                }
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFF0D1424))
+                .border(1.dp, Line, RoundedCornerShape(18.dp)).padding(5.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("Users", "Invites", "Activity", "Settings").forEachIndexed { i, t ->
+                    Box(Modifier.weight(1f).clip(RoundedCornerShape(13.dp))
+                        .background(if (tab == i) Color(0xFF293454) else Color.Transparent)
+                        .clickable { tab = i }.padding(vertical = 11.dp), contentAlignment = Alignment.Center) {
+                        Text(t, fontSize = 11.sp, fontWeight = if (tab == i) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (tab == i) Color.White else Dim, maxLines = 1)
+                    }
+                }
+            }
+        }
         if (msg.isNotEmpty()) item { Text(msg, color = Red) }
         if (tab == 0) {
             item { RedBtn("New user") { dlg = "user" } }
@@ -216,25 +251,71 @@ data class Srv(val name: String, val url: String, val user: String)
             item { Field(q, { q = it }, "Search users") }
             items(shown) { u ->
                 val dis = u.optBoolean("disabled"); val exp = u.optLong("expiry")
-                JCard { Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) { Text(u.optString("name"), fontSize = 22.sp)
-                        val em = u.optString("email"); if (em.isNotEmpty()) Text(em, color = Dim)
-                        if (exp > 0) Text("Expires " + DateFormat.getDateInstance().format(Date(if (exp > 1e12) exp else exp * 1000)), color = Dim, fontSize = 13.sp) }
-                    Pill(if (u.optBoolean("admin")) "Admin" else if (dis) "Disabled" else "Active", if (dis) Red else Green) }
+                JCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Switch(!dis, { on -> act { api.setEnabled(u.getString("id"), on) } }, colors = SwitchDefaults.colors(checkedTrackColor = Red))
+                        Box(Modifier.size(46.dp).clip(RoundedCornerShape(15.dp))
+                            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF6E56CF), Color(0xFF1A9DB8)))),
+                            contentAlignment = Alignment.Center) {
+                            Text(u.optString("name").firstOrNull()?.uppercase() ?: "U", fontSize = 20.sp,
+                                color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.width(13.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(u.optString("name"), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            val em = u.optString("email")
+                            Text(em.ifEmpty { if (u.optBoolean("admin")) "Administrator" else "JFA-GO account" },
+                                color = Dim, fontSize = 12.sp, maxLines = 1)
+                        }
+                        Pill(if (u.optBoolean("admin")) "ADMIN" else if (dis) "DISABLED" else "ACTIVE",
+                            if (dis) Color(0xFFFF8A8A) else Green)
+                    }
+                    if (exp > 0) {
+                        Spacer(Modifier.height(13.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Schedule, null, tint = Dim, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Expires " + DateFormat.getDateInstance().format(Date(if (exp > 1e12) exp else exp * 1000)),
+                                color = Dim, fontSize = 12.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Switch(!dis, { on -> act { api.setEnabled(u.getString("id"), on) } },
+                                colors = SwitchDefaults.colors(checkedTrackColor = Cyan, checkedThumbColor = Color.White))
+                            Text(if (dis) "Disabled" else "Enabled", fontSize = 11.sp, color = Dim)
+                        }
                         Spacer(Modifier.weight(1f))
-                        IconButton({ target = u; dlg = "expiry" }) { Icon(Icons.Default.Schedule, "Expiry", tint = Dim) }
-                        IconButton({ target = u; dlg = "del" }) { Icon(Icons.Default.Delete, "Delete", tint = Red) } } }
+                        TextButton({ target = u; dlg = "expiry" }) {
+                            Icon(Icons.Default.Schedule, null, tint = Dim, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp)); Text("Expiry", color = Dim, fontSize = 12.sp)
+                        }
+                        IconButton({ target = u; dlg = "del" }) { Icon(Icons.Default.DeleteOutline, "Delete", tint = Color(0xFFFF8A8A)) }
+                    }
+                }
             }
         } else if (tab == 1) {
             item { RedBtn("New invite") { dlg = "invite" } }
             items(invites) { i ->
                 val code = i.optString("code")
-                JCard { Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) { Text(code, fontSize = 20.sp); Text("Uses left: " + i.optString("remaining-uses").ifEmpty { "∞" }, color = Dim) }
-                    IconButton({ (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("invite", "${api.base}/invite/$code")) }) { Icon(Icons.Default.ContentCopy, "Copy", tint = Dim) }
-                    IconButton({ act { api.deleteInvite(code) } }) { Icon(Icons.Default.Delete, "Delete", tint = Red) } } }
+                JCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFF39D5F2).copy(alpha = .12f)),
+                            contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.ConfirmationNumber, null, tint = Cyan)
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(code, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            Text("Uses remaining · " + i.optString("remaining-uses").ifEmpty { "Unlimited" }, color = Dim, fontSize = 12.sp)
+                        }
+                        IconButton({ (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("invite", "${api.base}/invite/$code")) }) {
+                            Icon(Icons.Default.ContentCopy, "Copy invite link", tint = Cyan)
+                        }
+                        IconButton({ act { api.deleteInvite(code) } }) { Icon(Icons.Default.DeleteOutline, "Delete", tint = Color(0xFFFF8A8A)) }
+                    }
+                }
             }
         }
         if (tab == 2) {
