@@ -103,7 +103,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     val brush = androidx.compose.ui.graphics.Brush.linearGradient(
         colors = listOf(tint.copy(alpha = 0.15f + phase * 0.09f), CardC, tint.copy(alpha = 0.07f + phase * 0.06f)),
         start = Offset(phase * 240f, 0f), end = Offset(400f, 360f))
-    Column(modifier.weight(1f).heightIn(min = 158.dp).clip(RoundedCornerShape(24.dp))
+    Column(modifier.heightIn(min = 158.dp).clip(RoundedCornerShape(24.dp))
         .background(brush).border(1.dp, tint.copy(alpha = 0.18f + phase * 0.18f), RoundedCornerShape(24.dp))
         .padding(14.dp), verticalArrangement = Arrangement.Center) {
         Box(Modifier.size(34.dp).clip(RoundedCornerShape(11.dp)).background(tint.copy(alpha = 0.16f + phase * 0.08f)), contentAlignment = Alignment.Center) {
@@ -327,9 +327,9 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         item { Header(s.name) }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatCard("TOTAL USERS", users.size, Color(0xFF9B72FF), Icons.Default.Groups)
-                StatCard("INVITATIONS", invites.size, Cyan, Icons.Default.ConfirmationNumber)
-                StatCard("DISABLED", off, Color(0xFFFFB86B), Icons.Default.Block)
+                StatCard("TOTAL USERS", users.size, Color(0xFF9B72FF), Icons.Default.Groups, Modifier.weight(1f))
+                StatCard("INVITATIONS", invites.size, Cyan, Icons.Default.ConfirmationNumber, Modifier.weight(1f))
+                StatCard("DISABLED", off, Color(0xFFFFB86B), Icons.Default.Block, Modifier.weight(1f))
             }
         }
         item {
