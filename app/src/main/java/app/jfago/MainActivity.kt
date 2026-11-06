@@ -140,7 +140,8 @@ data class Srv(val name: String, val url: String, val user: String)
     var adding by remember { mutableStateOf(false) }
     var login by remember { mutableStateOf<Srv?>(null) }
     val online = remember { mutableStateMapOf<String, Boolean>() }
-    val credentials = remember { credentialPrefs(LocalContext.current) }
+    val context = LocalContext.current
+    val credentials = remember(context) { credentialPrefs(context) }
     val scope = rememberCoroutineScope()
     var authError by remember { mutableStateOf("") }
     var authenticating by remember { mutableStateOf(false) }
@@ -236,7 +237,7 @@ data class Srv(val name: String, val url: String, val user: String)
                     save(if (old == null) servers + s else servers.map { if (it == old) s else it })
                     close()
                 }) { Text("Save", color = Red) } },
-            dismissButton = { Row { if (old != null) TextButton({ save(servers - old); close() }) { Text("Delete", color = Red) }; TextButton(close) { Text("Cancel") } } })
+            dismissButton = { Row { if (old != null) TextButton({ credentials.edit().remove(old.url).apply(); save(servers - old); close() }) { Text("Delete", color = Red) }; TextButton(close) { Text("Cancel") } } })
     }
     login?.let { s ->
         var pw by remember { mutableStateOf(credentials.getString(s.url, "").orEmpty()) }; var err by remember { mutableStateOf(authError) }; var busy by remember { mutableStateOf(false) }
