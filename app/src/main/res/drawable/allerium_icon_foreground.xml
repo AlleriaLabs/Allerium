@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<inset xmlns:android="http://schemas.android.com/apk/res/android"
-    android:drawable="@drawable/allerium_mark"
-    android:inset="30%" />
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:drawable="@drawable/allerium_mark"
+        android:width="72dp"
+        android:height="72dp"
+        android:gravity="center" />
+</layer-list>
