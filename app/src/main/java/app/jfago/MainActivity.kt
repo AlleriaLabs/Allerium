@@ -340,7 +340,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     val shown = users.filter { q.isBlank() || it.optString("name").contains(q, true) || it.optString("email").contains(q, true) }
 
     Box(Modifier.fillMaxSize()) {
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp).padding(bottom = 82.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp).padding(bottom = 154.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Header(s.name) }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -358,28 +358,6 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 }
                 IconButton({ refresh() }, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PillC)) {
                     Icon(Icons.Default.Refresh, "Refresh", tint = Red)
-                }
-            }
-        }
-        item {
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFF0D1424))
-                .border(1.dp, Line, RoundedCornerShape(18.dp)).padding(5.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf(
-                    Triple("Users", Icons.Default.People, 0),
-                    Triple("Invites", Icons.Default.ConfirmationNumber, 1),
-                    Triple("Activity", Icons.Default.Timeline, 2)
-                ).forEach { (label, glyph, index) ->
-                    val selectedTint by animateColorAsState(if (tab == index) Color.White else Dim, tween(220), label = "navTint$index")
-                    Box(Modifier.weight(1f).clip(RoundedCornerShape(13.dp))
-                        .background(if (tab == index) Color(0xFF292A2E) else Color.Transparent)
-                        .clickable { tab = index }.padding(vertical = 9.dp), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Icon(glyph, contentDescription = label, tint = selectedTint, modifier = Modifier.size(17.dp))
-                            Text(label, fontSize = 10.sp, fontWeight = if (tab == index) FontWeight.SemiBold else FontWeight.Normal,
-                                color = selectedTint, maxLines = 1)
-                        }
-                    }
                 }
             }
         }
@@ -486,8 +464,32 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         }
         item { TextButton(back) { Text("Switch server", color = Dim) }; Spacer(Modifier.height(24.dp)) }
     }
+    Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xFF17181B))) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+        Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            listOf(
+                Triple("Users", Icons.Default.People, 0),
+                Triple("Invites", Icons.Default.ConfirmationNumber, 1),
+                Triple("Activity", Icons.Default.Timeline, 2)
+            ).forEach { (label, glyph, index) ->
+                val selectedTint by animateColorAsState(if (tab == index) Red else Dim, tween(220), label = "bottomNav$index")
+                Column(Modifier.weight(1f).fillMaxHeight().clickable { tab = index },
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Box(Modifier.size(34.dp).clip(CircleShape)
+                        .background(if (tab == index) Red.copy(alpha = 0.13f) else Color.Transparent),
+                        contentAlignment = Alignment.Center) {
+                        Icon(glyph, contentDescription = label, tint = selectedTint, modifier = Modifier.size(19.dp))
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Text(label, fontSize = 10.sp, color = selectedTint,
+                        fontWeight = if (tab == index) FontWeight.SemiBold else FontWeight.Normal)
+                }
+            }
+        }
+    }
     if (tab == 0) {
-        Box(Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 24.dp)
+        Box(Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 78.dp)
             .size(58.dp).clip(CircleShape)
             .background(Red)
             .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape)
