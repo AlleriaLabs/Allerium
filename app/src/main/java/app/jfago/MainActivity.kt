@@ -49,14 +49,15 @@ import java.net.URL
 import java.text.DateFormat
 import java.util.Date
 
-val Bg = Color(0xFF080B16)
-val CardC = Color(0xFF11182A)
-val Line = Color(0xFF26334D)
-val Red = Color(0xFF9B72FF)
-val Cyan = Color(0xFF39D5F2)
-val Dim = Color(0xFF9AA8C3)
-val Green = Color(0xFF43D9A3)
-val PillC = Color(0xFF1C2740)
+// Shared Allerion visual language: charcoal surfaces, crisp white type, restrained red accent.
+val Bg = Color(0xFF101113)
+val CardC = Color(0xFF191A1E)
+val Line = Color(0xFF303136)
+val Red = Color(0xFFE50914)
+val Cyan = Color(0xFFF5F5F5)
+val Dim = Color(0xFF929398)
+val Green = Color(0xFF35C98A)
+val PillC = Color(0xFF242529)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -81,19 +82,19 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
 }
 
 @Composable fun JCard(m: Modifier = Modifier, c: @Composable ColumnScope.() -> Unit) =
-    Column(m.fillMaxWidth().clip(RoundedCornerShape(24.dp))
-        .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF17223A), CardC, Color(0xFF101727))))
-        .border(1.dp, Line.copy(alpha = 0.8f), RoundedCornerShape(24.dp))
-        .animateContentSize(animationSpec = tween(240)).padding(18.dp), content = c)
+    Column(m.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+        .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF202124), CardC, Color(0xFF151619))))
+        .border(1.dp, Line, RoundedCornerShape(20.dp))
+        .animateContentSize(animationSpec = tween(240)).padding(15.dp), content = c)
 
 @Composable fun AnimatedServerCard(m: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val transition = rememberInfiniteTransition(label = "serverCardGlow")
     val phase by transition.animateFloat(0f, 1f, animationSpec = infiniteRepeatable(tween(5200), repeatMode = RepeatMode.Reverse), label = "serverCardPhase")
     val brush = androidx.compose.ui.graphics.Brush.linearGradient(
-        colors = listOf(Color(0xFF17223A), Color(0xFF17223A).copy(alpha = 0.88f + phase * 0.10f), Color(0xFF10243A)),
+        colors = listOf(Color(0xFF252629), Color(0xFF191A1E).copy(alpha = 0.92f + phase * 0.05f), Color(0xFF211719)),
         start = Offset(phase * 360f, 0f), end = Offset(620f, 520f))
-    Column(m.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(brush)
-        .border(1.dp, Line.copy(alpha = 0.85f), RoundedCornerShape(24.dp))
+    Column(m.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(brush)
+        .border(1.dp, Red.copy(alpha = 0.12f + phase * 0.08f), RoundedCornerShape(22.dp))
         .animateContentSize(animationSpec = tween(240)).padding(18.dp), content = content)
 }
 
@@ -106,9 +107,9 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         start = Offset(phase * 240f, 0f), end = Offset(400f, 360f)
     )
     Column(
-        modifier.height(112.dp).clip(RoundedCornerShape(20.dp))
+        modifier.height(96.dp).clip(RoundedCornerShape(18.dp))
             .background(brush)
-            .border(1.dp, tint.copy(alpha = 0.18f + phase * 0.18f), RoundedCornerShape(20.dp))
+            .border(1.dp, tint.copy(alpha = 0.16f + phase * 0.12f), RoundedCornerShape(18.dp))
             .padding(horizontal = 11.dp, vertical = 9.dp),
         verticalArrangement = Arrangement.Center
     ) {
@@ -124,7 +125,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             ) {
                 Icon(glyph, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
             }
-            Text("$count", fontSize = 25.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text("$count", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
         }
         Spacer(Modifier.height(7.dp))
         Text(label, fontSize = 8.sp, color = Dim, letterSpacing = 0.8.sp, maxLines = 1)
@@ -146,7 +147,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
 
 @Composable fun RedBtn(t: String, enabled: Boolean = true, icon: ImageVector? = null, on: () -> Unit) =
     Row(Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(16.dp))
-        .background(if (enabled) androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color(0xFF7458D6), Color(0xFF416DCE), Color(0xFF168DAA))) else androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Line, Line)))
+        .background(if (enabled) Red else Line)
         .clickable(enabled = enabled, onClick = on).padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
         if (icon != null) { Icon(icon, null, tint = Color.White, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(9.dp)) }
@@ -160,7 +161,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
 
 @Composable fun Header(sub: String) = Column(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp)) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.allerium_mark), null, Modifier.size(54.dp))
+        androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.allerium_mark), null, Modifier.size(40.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
             Text("ALLERIUM", color = Color.White, fontSize = 15.sp, letterSpacing = 2.4.sp, fontWeight = FontWeight.Bold)
@@ -230,8 +231,8 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         item {
             Column(Modifier.padding(top = 8.dp, bottom = 2.dp)) {
                 Text("Welcome back", color = Dim, fontSize = 10.sp, letterSpacing = 1.sp)
-                Text("Your servers", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                Text("Choose a server to manage its users and invitations.", color = Dim, fontSize = 10.sp)
+                Text("Your servers", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("Manage your JFA-GO workspace.", color = Dim, fontSize = 12.sp)
             }
         }
         if (servers.isEmpty()) item {
@@ -251,7 +252,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             AnimatedServerCard(Modifier.clickable(enabled = !authenticating) { selectServer(s) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(48.dp).clip(RoundedCornerShape(15.dp))
-                        .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF6E56CF), Color(0xFF159EB8)))),
+                        .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Red, Color(0xFF8E080F)))),
                         contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.Dns, null, tint = Color.White, modifier = Modifier.size(24.dp))
                     }
@@ -268,9 +269,9 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Open server workspace", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Open server workspace", color = Red, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.weight(1f))
-                    Icon(Icons.Default.ArrowForward, null, tint = Cyan, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.ArrowForward, null, tint = Red, modifier = Modifier.size(18.dp))
                 }
             }
             }
@@ -352,11 +353,11 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(if (tab == 0) "Directory" else if (tab == 1) "Invitations" else "Activity",
-                        fontSize = 21.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Text("Manage your JFA-GO server", color = Dim, fontSize = 12.sp)
                 }
                 IconButton({ refresh() }, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PillC)) {
-                    Icon(Icons.Default.Refresh, "Refresh", tint = Cyan)
+                    Icon(Icons.Default.Refresh, "Refresh", tint = Red)
                 }
             }
         }
@@ -371,7 +372,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 ).forEach { (label, glyph, index) ->
                     val selectedTint by animateColorAsState(if (tab == index) Color.White else Dim, tween(220), label = "navTint$index")
                     Box(Modifier.weight(1f).clip(RoundedCornerShape(13.dp))
-                        .background(if (tab == index) Color(0xFF293454) else Color.Transparent)
+                        .background(if (tab == index) Color(0xFF292A2E) else Color.Transparent)
                         .clickable { tab = index }.padding(vertical = 9.dp), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Icon(glyph, contentDescription = label, tint = selectedTint, modifier = Modifier.size(17.dp))
@@ -390,14 +391,14 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 JCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(46.dp).clip(RoundedCornerShape(15.dp))
-                            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF6E56CF), Color(0xFF1A9DB8)))),
+                            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Red, Color(0xFF8E080F)))),
                             contentAlignment = Alignment.Center) {
                             Text(u.optString("name").firstOrNull()?.uppercase() ?: "U", fontSize = 10.sp,
                                 color = Color.White, fontWeight = FontWeight.Bold)
                         }
                         Spacer(Modifier.width(13.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(u.optString("name"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            Text(u.optString("name"), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                             val em = u.optString("email")
                             Text(em.ifEmpty { if (u.optBoolean("admin")) "Administrator" else "JFA-GO account" },
                                 color = Dim, fontSize = 10.sp, maxLines = 1)
@@ -418,8 +419,8 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                     Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Switch(!dis, { on -> act { api.setEnabled(u.getString("id"), on) } },
-                            modifier = Modifier.scale(0.78f),
-                            colors = SwitchDefaults.colors(checkedTrackColor = Cyan, checkedThumbColor = Color.White))
+                            modifier = Modifier.scale(0.68f),
+                            colors = SwitchDefaults.colors(checkedTrackColor = Red, checkedThumbColor = Color.White, uncheckedTrackColor = Line))
                         Spacer(Modifier.weight(1f))
                         TextButton({ target = u; dlg = "expiry" }) {
                             Icon(Icons.Default.Schedule, null, tint = Dim, modifier = Modifier.size(16.dp))
@@ -435,9 +436,9 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 val code = i.optString("code")
                 JCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFF39D5F2).copy(alpha = .12f)),
+                        Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(Red.copy(alpha = .12f)),
                             contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.ConfirmationNumber, null, tint = Cyan)
+                            Icon(Icons.Default.ConfirmationNumber, null, tint = Red)
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
@@ -469,8 +470,8 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 }
                 JCard {
                     Row(verticalAlignment = Alignment.Top) {
-                        Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Cyan.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                            Icon(glyph, null, tint = Cyan, modifier = Modifier.size(19.dp))
+                        Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Red.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                            Icon(glyph, null, tint = Red, modifier = Modifier.size(19.dp))
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -488,10 +489,10 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     if (tab == 0) {
         Box(Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 24.dp)
             .size(58.dp).clip(CircleShape)
-            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF7658D8), Color(0xFF168FAE))))
+            .background(Red)
             .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape)
             .clickable { dlg = "user" }, contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.PersonAdd, contentDescription = "Create user", tint = Color.White, modifier = Modifier.size(25.dp))
+            Icon(Icons.Default.PersonAdd, contentDescription = "Create user", tint = Color.White, modifier = Modifier.size(23.dp))
         }
     }
     }
