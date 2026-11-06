@@ -49,7 +49,7 @@ import java.net.URL
 import java.text.DateFormat
 import java.util.Date
 
-// Shared Allerion visual language: charcoal surfaces, crisp white type, restrained red accent.
+// Allerium visual system: ALLERION-inspired surfaces and motion, with Allerium's cyan/purple identity.
 val Bg = Color(0xFF080B16)
 val CardC = Color(0xFF11182A)
 val Line = Color(0xFF26334D)
@@ -82,20 +82,20 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
 }
 
 @Composable fun JCard(m: Modifier = Modifier, c: @Composable ColumnScope.() -> Unit) =
-    Column(m.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-        .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF17223A), CardC, Color(0xFF101727))))
-        .border(1.dp, Line, RoundedCornerShape(20.dp))
-        .animateContentSize(animationSpec = tween(240)).padding(15.dp), content = c)
+    Column(m.fillMaxWidth().clip(RoundedCornerShape(22.dp))
+        .background(CardC)
+        .border(1.dp, Line.copy(alpha = 0.82f), RoundedCornerShape(22.dp))
+        .animateContentSize(animationSpec = tween(260)).padding(16.dp), content = c)
 
 @Composable fun AnimatedServerCard(m: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val transition = rememberInfiniteTransition(label = "serverCardGlow")
     val phase by transition.animateFloat(0f, 1f, animationSpec = infiniteRepeatable(tween(5200), repeatMode = RepeatMode.Reverse), label = "serverCardPhase")
     val brush = androidx.compose.ui.graphics.Brush.linearGradient(
-        colors = listOf(Color(0xFF17223A), Color(0xFF17223A).copy(alpha = 0.92f + phase * 0.05f), Color(0xFF10243A)),
-        start = Offset(phase * 360f, 0f), end = Offset(620f, 520f))
-    Column(m.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(brush)
-        .border(1.dp, Red.copy(alpha = 0.12f + phase * 0.08f), RoundedCornerShape(22.dp))
-        .animateContentSize(animationSpec = tween(240)).padding(18.dp), content = content)
+        colors = listOf(CardC, CardC.copy(alpha = 0.96f), Color(0xFF14243A)),
+        start = Offset(phase * 260f, 0f), end = Offset(620f, 520f))
+    Column(m.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(brush)
+        .border(1.dp, Cyan.copy(alpha = 0.10f + phase * 0.06f), RoundedCornerShape(24.dp))
+        .animateContentSize(animationSpec = tween(280)).padding(18.dp), content = content)
 }
 
 @Composable fun StatCard(label: String, value: Int, tint: Color, glyph: ImageVector, modifier: Modifier = Modifier) {
@@ -224,7 +224,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     }
     LaunchedEffect(servers) { servers.forEach { s -> launch(Dispatchers.IO) {
         online[s.url] = try { (URL(s.url).openConnection() as HttpURLConnection).run { connectTimeout = 4000; readTimeout = 4000; responseCode; true } } catch (e: Exception) { false } } } }
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Header("Your secure JFA-GO workspace") }
         if (authenticating) item { Text("Connecting securely…", color = Cyan, fontSize = 11.sp) }
         if (authError.isNotBlank()) item { Text(authError, color = Color(0xFFFF8A8A), fontSize = 11.sp) }
@@ -252,7 +252,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             AnimatedServerCard(Modifier.clickable(enabled = !authenticating) { selectServer(s) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(48.dp).clip(RoundedCornerShape(15.dp))
-                        .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Red, Color(0xFF168DAA)))),
+                         .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Red, Cyan))),
                         contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.Dns, null, tint = Color.White, modifier = Modifier.size(24.dp))
                     }
@@ -464,37 +464,39 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         }
         item { TextButton(back) { Text("Switch server", color = Dim) }; Spacer(Modifier.height(24.dp)) }
     }
-    Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xFF17181B))) {
+    Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(CardC)) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
-        Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            listOf(
-                Triple("Users", Icons.Default.People, 0),
-                Triple("Invites", Icons.Default.ConfirmationNumber, 1),
-                Triple("Activity", Icons.Default.Timeline, 2)
-            ).forEach { (label, glyph, index) ->
-                val selectedTint by animateColorAsState(if (tab == index) Red else Dim, tween(220), label = "bottomNav$index")
-                Column(Modifier.weight(1f).fillMaxHeight().clickable { tab = index },
-                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                    Box(Modifier.size(34.dp).clip(CircleShape)
-                        .background(if (tab == index) Red.copy(alpha = 0.13f) else Color.Transparent),
-                        contentAlignment = Alignment.Center) {
-                        Icon(glyph, contentDescription = label, tint = selectedTint, modifier = Modifier.size(19.dp))
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val segment = maxWidth / 3
+            val indicatorX by androidx.compose.animation.core.animateDpAsState(segment * tab + segment / 2 - 14.dp, tween(280), label = "navIndicator")
+            Box(Modifier.offset(x = indicatorX).width(28.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Red))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                listOf(
+                    Triple("Users", Icons.Default.People, 0),
+                    Triple("Invites", Icons.Default.ConfirmationNumber, 1),
+                    Triple("Activity", Icons.Default.Timeline, 2)
+                ).forEach { (label, glyph, index) ->
+                    val selectedTint by animateColorAsState(if (tab == index) Color.White else Dim, tween(220), label = "bottomNav$index")
+                    Column(Modifier.weight(1f).clickable { tab = index }.padding(top = 11.dp, bottom = 9.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(glyph, contentDescription = label, tint = selectedTint, modifier = Modifier.size(21.dp))
+                        Spacer(Modifier.height(4.dp))
+                        Text(label, fontSize = 11.sp, color = selectedTint,
+                            fontWeight = if (tab == index) FontWeight.SemiBold else FontWeight.Medium)
                     }
-                    Spacer(Modifier.height(2.dp))
-                    Text(label, fontSize = 10.sp, color = selectedTint,
-                        fontWeight = if (tab == index) FontWeight.SemiBold else FontWeight.Normal)
                 }
             }
         }
     }
     if (tab == 0) {
-        Box(Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 78.dp)
-            .size(58.dp).clip(CircleShape)
-            .background(Red)
-            .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape)
-            .clickable { dlg = "user" }, contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.PersonAdd, contentDescription = "Create user", tint = Color.White, modifier = Modifier.size(23.dp))
+        Row(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 78.dp)
+            .clip(RoundedCornerShape(50)).background(Red)
+            .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(50))
+            .clickable { dlg = "user" }.padding(horizontal = 18.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.PersonAdd, contentDescription = "Create user", tint = Color.White, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Add user", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
         }
     }
     }
