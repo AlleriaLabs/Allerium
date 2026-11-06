@@ -344,9 +344,9 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         item { Header(s.name) }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatCard("TOTAL USERS", users.size, Color(0xFF9B72FF), Icons.Default.Groups, Modifier.weight(1f))
-                StatCard("INVITATIONS", invites.size, Cyan, Icons.Default.ConfirmationNumber, Modifier.weight(1f))
-                StatCard("DISABLED", off, Color(0xFFFFB86B), Icons.Default.Block, Modifier.weight(1f))
+                StatCard("TOTAL USERS", users.size, Red, Icons.Default.Groups, Modifier.weight(1f))
+                StatCard("INVITATIONS", invites.size, Color(0xFFB8BBC0), Icons.Default.ConfirmationNumber, Modifier.weight(1f))
+                StatCard("DISABLED", off, Color(0xFFFFB547), Icons.Default.Block, Modifier.weight(1f))
             }
         }
         item {
@@ -371,7 +371,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                         Box(Modifier.size(46.dp).clip(RoundedCornerShape(15.dp))
                             .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Red, Color(0xFF8E080F)))),
                             contentAlignment = Alignment.Center) {
-                            Text(u.optString("name").firstOrNull()?.uppercase() ?: "U", fontSize = 10.sp,
+                            Text(u.optString("name").firstOrNull()?.uppercase() ?: "U", fontSize = 14.sp,
                                 color = Color.White, fontWeight = FontWeight.Bold)
                         }
                         Spacer(Modifier.width(13.dp))
