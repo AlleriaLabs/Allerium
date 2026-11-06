@@ -29,6 +29,7 @@ import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -103,16 +104,16 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     val brush = androidx.compose.ui.graphics.Brush.linearGradient(
         colors = listOf(tint.copy(alpha = 0.15f + phase * 0.09f), CardC, tint.copy(alpha = 0.07f + phase * 0.06f)),
         start = Offset(phase * 240f, 0f), end = Offset(400f, 360f))
-    Column(modifier.heightIn(min = 158.dp).clip(RoundedCornerShape(24.dp))
+    Column(modifier.height(112.dp).clip(RoundedCornerShape(20.dp))
         .background(brush).border(1.dp, tint.copy(alpha = 0.18f + phase * 0.18f), RoundedCornerShape(24.dp))
-        .padding(14.dp), verticalArrangement = Arrangement.Center) {
-        Box(Modifier.size(34.dp).clip(RoundedCornerShape(11.dp)).background(tint.copy(alpha = 0.16f + phase * 0.08f)), contentAlignment = Alignment.Center) {
-            Icon(glyph, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+        .padding(horizontal = 11.dp, vertical = 9.dp), verticalArrangement = Arrangement.Center) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Box(Modifier.size(28.dp).clip(RoundedCornerShape(11.dp)).background(tint.copy(alpha = 0.16f + phase * 0.08f)), contentAlignment = Alignment.Center) {
+            Icon(glyph, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+            Text("$count", fontSize = 25.sp, fontWeight = FontWeight.Bold, color = Color.White)
         }
-        Spacer(Modifier.height(13.dp))
-        Text("$count", fontSize = 29.sp, fontWeight = FontWeight.Bold, color = Color.White)
-        Spacer(Modifier.height(3.dp))
-        Text(label, fontSize = 8.sp, color = Dim, letterSpacing = 1.sp, maxLines = 1)
+        Spacer(Modifier.height(7.dp))
+        Text(label, fontSize = 8.sp, color = Dim, letterSpacing = 0.8.sp, maxLines = 1)
     }
 }
 
@@ -124,9 +125,9 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
 
 @Composable fun Pill(t: String, dot: Color? = null) =
     Row(Modifier.clip(RoundedCornerShape(50)).background(PillC).border(1.dp, Line, RoundedCornerShape(50))
-        .padding(horizontal = 13.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (dot != null) { Box(Modifier.size(8.dp).clip(CircleShape).background(dot)); Spacer(Modifier.width(8.dp)) }
-        Text(t, fontSize = 10.sp, color = Color(0xFFE4EAF8), fontWeight = FontWeight.Medium)
+        .padding(horizontal = 9.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (dot != null) { Box(Modifier.size(6.dp).clip(CircleShape).background(dot)); Spacer(Modifier.width(5.dp)) }
+        Text(t, fontSize = 8.sp, color = Color(0xFFE4EAF8), fontWeight = FontWeight.Medium)
     }
 
 @Composable fun RedBtn(t: String, enabled: Boolean = true, icon: ImageVector? = null, on: () -> Unit) =
@@ -323,7 +324,8 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     val off = users.count { it.optBoolean("disabled") }
     val shown = users.filter { q.isBlank() || it.optString("name").contains(q, true) || it.optString("email").contains(q, true) }
 
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Box(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp).padding(bottom = 82.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Header(s.name) }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -368,7 +370,6 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         }
         if (msg.isNotEmpty()) item { Text(msg, color = Red) }
         if (tab == 0) {
-            item { RedBtn("Create user", icon = Icons.Default.PersonAdd) { dlg = "user" } }
             item { Field(q, { q = it }, "Search users") }
             items(shown) { u ->
                 val dis = u.optBoolean("disabled"); val exp = u.optLong("expiry")
@@ -403,6 +404,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                     Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Switch(!dis, { on -> act { api.setEnabled(u.getString("id"), on) } },
+                            modifier = Modifier.scale(0.78f),
                             colors = SwitchDefaults.colors(checkedTrackColor = Cyan, checkedThumbColor = Color.White))
                         Spacer(Modifier.weight(1f))
                         TextButton({ target = u; dlg = "expiry" }) {
@@ -468,6 +470,16 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             }
         }
         item { TextButton(back) { Text("Switch server", color = Dim) }; Spacer(Modifier.height(24.dp)) }
+    }
+    if (tab == 0) {
+        Box(Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 24.dp)
+            .size(58.dp).clip(CircleShape)
+            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF7658D8), Color(0xFF168FAE))))
+            .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape)
+            .clickable { dlg = "user" }, contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.PersonAdd, contentDescription = "Create user", tint = Color.White, modifier = Modifier.size(25.dp))
+        }
+    }
     }
     val close = { dlg = ""; target = null }
     if (dlg == "invite" || dlg == "expiry") {
