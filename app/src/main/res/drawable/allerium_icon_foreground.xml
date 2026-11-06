@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Keep the Allerium mark at 72dp centered on the launcher canvas to match the smaller ALLERION icon treatment. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item
         android:drawable="@drawable/allerium_mark"
