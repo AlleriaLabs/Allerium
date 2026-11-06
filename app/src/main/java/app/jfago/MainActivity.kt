@@ -11,6 +11,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,9 +24,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.toArgb
@@ -78,6 +84,37 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF17223A), CardC, Color(0xFF101727))))
         .border(1.dp, Line.copy(alpha = 0.8f), RoundedCornerShape(24.dp))
         .animateContentSize(animationSpec = tween(240)).padding(18.dp), content = c)
+
+@Composable fun AnimatedServerCard(m: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val transition = rememberInfiniteTransition(label = "serverCardGlow")
+    val phase by transition.animateFloat(0f, 1f, animationSpec = infiniteRepeatable(tween(5200), repeatMode = RepeatMode.Reverse), label = "serverCardPhase")
+    val brush = androidx.compose.ui.graphics.Brush.linearGradient(
+        colors = listOf(Color(0xFF17223A), Color(0xFF17223A).copy(alpha = 0.88f + phase * 0.10f), Color(0xFF10243A)),
+        start = Offset(phase * 360f, 0f), end = Offset(620f, 520f))
+    Column(m.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(brush)
+        .border(1.dp, Line.copy(alpha = 0.85f), RoundedCornerShape(24.dp))
+        .animateContentSize(animationSpec = tween(240)).padding(18.dp), content = content)
+}
+
+@Composable fun StatCard(label: String, value: Int, tint: Color, glyph: ImageVector, modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "stat-$label")
+    val phase by transition.animateFloat(0f, 1f, animationSpec = infiniteRepeatable(tween(3600), repeatMode = RepeatMode.Reverse), label = "statGlow-$label")
+    val count by animateIntAsState(value, animationSpec = tween(700), label = "statCount-$label")
+    val brush = androidx.compose.ui.graphics.Brush.linearGradient(
+        colors = listOf(tint.copy(alpha = 0.15f + phase * 0.09f), CardC, tint.copy(alpha = 0.07f + phase * 0.06f)),
+        start = Offset(phase * 240f, 0f), end = Offset(400f, 360f))
+    Column(modifier.weight(1f).heightIn(min = 158.dp).clip(RoundedCornerShape(24.dp))
+        .background(brush).border(1.dp, tint.copy(alpha = 0.18f + phase * 0.18f), RoundedCornerShape(24.dp))
+        .padding(14.dp), verticalArrangement = Arrangement.Center) {
+        Box(Modifier.size(34.dp).clip(RoundedCornerShape(11.dp)).background(tint.copy(alpha = 0.16f + phase * 0.08f)), contentAlignment = Alignment.Center) {
+            Icon(glyph, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.height(13.dp))
+        Text("$count", fontSize = 29.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Spacer(Modifier.height(3.dp))
+        Text(label, fontSize = 8.sp, color = Dim, letterSpacing = 1.sp, maxLines = 1)
+    }
+}
 
 @Composable fun Bar(f: Float, m: Modifier = Modifier) =
     Box(m.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(8.dp)).background(Line)) {
@@ -194,9 +231,9 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 }
             }
         }
-        items(servers) { s ->
+        items(servers, key = { it.url }) { s ->
             AnimatedVisibility(visible = true, enter = fadeIn(tween(320)) + slideInVertically(tween(320)) { it / 5 }) {
-            JCard(Modifier.clickable(enabled = !authenticating) { selectServer(s) }) {
+            AnimatedServerCard(Modifier.clickable(enabled = !authenticating) { selectServer(s) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(48.dp).clip(RoundedCornerShape(15.dp))
                         .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF6E56CF), Color(0xFF159EB8)))),
@@ -276,17 +313,13 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     var invites by remember { mutableStateOf(listOf<JSONObject>()) }
     var acts by remember { mutableStateOf(listOf<JSONObject>()) }
     var profs by remember { mutableStateOf(listOf<String>()) }
-    var cfg by remember { mutableStateOf<JSONObject?>(null) }
-    var cfgEdit by remember { mutableStateOf<Triple<String, String, JSONObject>?>(null) }
     var q by remember { mutableStateOf("") }
     var msg by remember { mutableStateOf("") }
     var dlg by remember { mutableStateOf("") }; var target by remember { mutableStateOf<JSONObject?>(null) }
     val scope = rememberCoroutineScope(); val ctx = LocalContext.current
     fun refresh() = scope.launch { try { withContext(Dispatchers.IO) { users = api.users(); invites = api.invites(); acts = try { api.activity() } catch (e: Exception) { acts }; profs = try { api.profiles() } catch (e: Exception) { profs } }; msg = "" } catch (e: Exception) { msg = e.message ?: "Error" } }
     fun act(b: () -> Unit) = scope.launch { try { withContext(Dispatchers.IO) { b() } } catch (e: Exception) { msg = e.message ?: "Error" }; refresh() }
-    fun setCfg(sec: String, k: String, v: Any) = scope.launch { try { withContext(Dispatchers.IO) { api.setConfig(sec, k, v); cfg = api.config() } } catch (e: Exception) { msg = e.message ?: "Error" } }
     LaunchedEffect(Unit) { refresh() }
-    LaunchedEffect(tab) { if (tab == 3 && cfg == null) try { cfg = withContext(Dispatchers.IO) { api.config() } } catch (e: Exception) { msg = e.message ?: "Error" } }
     val off = users.count { it.optBoolean("disabled") }
     val shown = users.filter { q.isBlank() || it.optString("name").contains(q, true) || it.optString("email").contains(q, true) }
 
@@ -294,28 +327,15 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         item { Header(s.name) }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                listOf(Triple("TOTAL USERS", users.size, Color(0xFF9B72FF)),
-                    Triple("INVITATIONS", invites.size, Cyan),
-                    Triple("DISABLED", off, Color(0xFFFFB86B))).forEach { (label, value, tint) ->
-                    JCard(Modifier.weight(1f)) {
-                        Box(Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(tint.copy(alpha = .13f)), contentAlignment = Alignment.Center) {
-                            Icon(when (label) {
-                                "TOTAL USERS" -> Icons.Default.Groups
-                                "INVITATIONS" -> Icons.Default.ConfirmationNumber
-                                else -> Icons.Default.Block
-                            }, contentDescription = null, tint = tint, modifier = Modifier.size(17.dp))
-                        }
-                        Spacer(Modifier.height(13.dp))
-                        Text("$value", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text(label, fontSize = 8.sp, color = Dim, letterSpacing = 1.sp, maxLines = 1)
-                    }
-                }
+                StatCard("TOTAL USERS", users.size, Color(0xFF9B72FF), Icons.Default.Groups)
+                StatCard("INVITATIONS", invites.size, Cyan, Icons.Default.ConfirmationNumber)
+                StatCard("DISABLED", off, Color(0xFFFFB86B), Icons.Default.Block)
             }
         }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(if (tab == 0) "Directory" else listOf("Directory", "Invitations", "Activity", "Settings")[tab],
+                    Text(if (tab == 0) "Directory" else if (tab == 1) "Invitations" else "Activity",
                         fontSize = 21.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Text("Manage your JFA-GO server", color = Dim, fontSize = 12.sp)
                 }
@@ -331,8 +351,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 listOf(
                     Triple("Users", Icons.Default.People, 0),
                     Triple("Invites", Icons.Default.ConfirmationNumber, 1),
-                    Triple("Activity", Icons.Default.Timeline, 2),
-                    Triple("Settings", Icons.Default.Tune, 3)
+                    Triple("Activity", Icons.Default.Timeline, 2)
                 ).forEach { (label, glyph, index) ->
                     val selectedTint by animateColorAsState(if (tab == index) Color.White else Dim, tween(220), label = "navTint$index")
                     Box(Modifier.weight(1f).clip(RoundedCornerShape(13.dp))
@@ -350,7 +369,6 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         if (msg.isNotEmpty()) item { Text(msg, color = Red) }
         if (tab == 0) {
             item { RedBtn("Create user", icon = Icons.Default.PersonAdd) { dlg = "user" } }
-            item { OutlinedButton({ dlg = "announce" }, Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(24.dp)) { Text("Announce to ${shown.size} shown", color = Red) } }
             item { Field(q, { q = it }, "Search users") }
             items(shown) { u ->
                 val dis = u.optBoolean("disabled"); val exp = u.optLong("expiry")
@@ -364,7 +382,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                         }
                         Spacer(Modifier.width(13.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(u.optString("name"), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            Text(u.optString("name"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                             val em = u.optString("email")
                             Text(em.ifEmpty { if (u.optBoolean("admin")) "Administrator" else "JFA-GO account" },
                                 color = Dim, fontSize = 10.sp, maxLines = 1)
@@ -384,11 +402,8 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                     Spacer(Modifier.height(12.dp))
                     Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Switch(!dis, { on -> act { api.setEnabled(u.getString("id"), on) } },
-                                colors = SwitchDefaults.colors(checkedTrackColor = Cyan, checkedThumbColor = Color.White))
-                            Text(if (dis) "Disabled" else "Enabled", fontSize = 10.sp, color = Dim)
-                        }
+                        Switch(!dis, { on -> act { api.setEnabled(u.getString("id"), on) } },
+                            colors = SwitchDefaults.colors(checkedTrackColor = Cyan, checkedThumbColor = Color.White))
                         Spacer(Modifier.weight(1f))
                         TextButton({ target = u; dlg = "expiry" }) {
                             Icon(Icons.Default.Schedule, null, tint = Dim, modifier = Modifier.size(16.dp))
@@ -425,27 +440,30 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             if (acts.isEmpty()) item { Text("No activity loaded.", color = Dim) }
             items(acts) { x ->
                 val t = x.optLong("time")
-                JCard { Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(x.optString("type").replaceFirstChar { it.uppercase() }, fontSize = 15.sp)
-                        val who = x.optString("username").ifEmpty { x.optString("value") }
-                        if (who.isNotEmpty()) Text(who, color = Dim)
-                        if (t > 0) Text(DateFormat.getDateTimeInstance().format(Date(if (t > 1e12) t else t * 1000)), color = Dim, fontSize = 10.sp)
+                val eventType = x.optString("type").ifBlank { "Activity" }.replace('_', ' ').replace('-', ' ').replaceFirstChar { it.uppercase() }
+                val who = x.optString("username").ifEmpty { x.optString("value") }
+                val detail = x.optString("message").ifEmpty { x.optString("description") }
+                val glyph = when {
+                    eventType.contains("creat", true) -> Icons.Default.PersonAdd
+                    eventType.contains("delet", true) || eventType.contains("remov", true) -> Icons.Default.PersonRemove
+                    eventType.contains("invit", true) -> Icons.Default.ConfirmationNumber
+                    eventType.contains("disabl", true) -> Icons.Default.Block
+                    eventType.contains("enabl", true) -> Icons.Default.CheckCircle
+                    else -> Icons.Default.History
+                }
+                JCard {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Cyan.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                            Icon(glyph, null, tint = Cyan, modifier = Modifier.size(19.dp))
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(eventType, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            if (who.isNotBlank()) Text(who, color = Dim, fontSize = 12.sp)
+                            if (detail.isNotBlank()) Text(detail, color = Dim, fontSize = 11.sp)
+                            if (t > 0) Text(DateFormat.getDateTimeInstance().format(Date(if (t > 1e12) t else t * 1000)), color = Dim, fontSize = 10.sp)
+                        }
                     }
-                    IconButton({ act { api.deleteActivity(x.getString("id")) } }) { Icon(Icons.Default.Delete, "Delete", tint = Red) } } }
-            }
-        }
-        if (tab == 3) {
-            val c = cfg
-            if (c == null) item { Text("Loading settings…", color = Dim) } else c.keys().forEach { sec ->
-                val st = c.optJSONObject(sec)?.optJSONObject("settings") ?: return@forEach
-                item(key = "h$sec") { Text(c.getJSONObject(sec).optJSONObject("meta")?.optString("name").orEmpty().ifEmpty { sec }, color = Red, fontSize = 10.sp) }
-                st.keys().forEach { k ->
-                    val o = st.getJSONObject(k); val bool = o.optString("type") == "bool"
-                    item(key = "$sec.$k") { JCard(Modifier.clickable(enabled = !bool) { cfgEdit = Triple(sec, k, o) }) { Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) { Text(o.optString("name", k))
-                            Text(if (o.optString("type") == "password") "••••" else o.opt("value")?.toString().orEmpty(), color = Dim, maxLines = 1) }
-                        if (bool) Switch(o.optBoolean("value"), { on -> setCfg(sec, k, on) }, colors = SwitchDefaults.colors(checkedTrackColor = Red)) } } }
                 }
             }
         }
@@ -471,21 +489,5 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             text = { Column { Field(n, { n = it }, "Username"); Field(p, { p = it }, "Password", true); Field(e, { e = it }, "Email (optional)"); Chips(profs, pf) { pf = it } } },
             confirmButton = { TextButton({ close(); act { api.createUser(n, p, e, pf) } }) { Text("Create", color = Red) } },
             dismissButton = { TextButton(close) { Text("Cancel") } })
-    }
-    if (dlg == "announce") {
-        var sj by remember { mutableStateOf("") }; var bd by remember { mutableStateOf("") }
-        AlertDialog(close, containerColor = CardC, title = { Text("Announce") },
-            text = { Column { Field(sj, { sj = it }, "Subject"); Field(bd, { bd = it }, "Message") } },
-            confirmButton = { TextButton({ val ids = shown.map { it.getString("id") }; close(); act { api.announce(ids, sj, bd) } }) { Text("Send", color = Red) } },
-            dismissButton = { TextButton(close) { Text("Cancel") } })
-    }
-    cfgEdit?.let { (sec, k, o) ->
-        var v by remember { mutableStateOf(if (o.optString("type") == "password") "" else o.opt("value")?.toString().orEmpty()) }
-        AlertDialog({ cfgEdit = null }, containerColor = CardC, title = { Text(o.optString("name", k)) },
-            text = { Column { val d = o.optString("description"); if (d.isNotEmpty()) Text(d, color = Dim, fontSize = 10.sp)
-                Field(v, { v = it }, sec, o.optString("type") == "password") } },
-            confirmButton = { TextButton({ cfgEdit = null
-                setCfg(sec, k, if (o.optString("type") == "number") (v.toIntOrNull() ?: v) else v) }) { Text("Save", color = Red) } },
-            dismissButton = { TextButton({ cfgEdit = null }) { Text("Cancel") } })
     }
 }
