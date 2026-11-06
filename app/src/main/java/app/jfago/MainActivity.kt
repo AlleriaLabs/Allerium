@@ -340,6 +340,13 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     var acts by remember { mutableStateOf(listOf<JSONObject>()) }
     var profs by remember { mutableStateOf(listOf<String>()) }
     var q by remember { mutableStateOf("") }
+    var userStatus by remember { mutableStateOf("All users") }
+    var userSort by remember { mutableStateOf("Name") }
+    var activityQuery by remember { mutableStateOf("") }
+    var activityWindow by remember { mutableStateOf("All time") }
+    var featureDialog by remember { mutableStateOf("") }
+    var diagnosticResult by remember { mutableStateOf("") }
+    var diagnosticBusy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
     var dlg by remember { mutableStateOf("") }; var target by remember { mutableStateOf<JSONObject?>(null) }
     val scope = rememberCoroutineScope(); val ctx = LocalContext.current
@@ -347,7 +354,32 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     fun act(b: () -> Unit) = scope.launch { try { withContext(Dispatchers.IO) { b() } } catch (e: Exception) { msg = e.message ?: "Error" }; refresh() }
     LaunchedEffect(Unit) { refresh() }
     val off = users.count { it.optBoolean("disabled") }
-    val shown = users.filter { q.isBlank() || it.optString("name").contains(q, true) || it.optString("email").contains(q, true) }
+    val shown = users.filter { u ->
+        val queryMatch = q.isBlank() || u.optString("name").contains(q, true) || u.optString("email").contains(q, true)
+        val statusMatch = when (userStatus) {
+            "Active" -> !u.optBoolean("disabled")
+            "Disabled" -> u.optBoolean("disabled")
+            "Admins" -> u.optBoolean("admin")
+            else -> true
+        }
+        queryMatch && statusMatch
+    }.let { list -> when (userSort) {
+        "Expiration" -> list.sortedBy { it.optLong("expiry") }
+        else -> list.sortedBy { it.optString("name").lowercase() }
+    } }
+    val nowSeconds = System.currentTimeMillis() / 1000L
+    val filteredActivities = acts.filter { item ->
+        val type = item.optString("type")
+        val searchText = type + " " + item.optString("username") + " " + item.optString("value") + " " + item.optString("message") + " " + item.optString("description")
+        val rawTime = item.optLong("time")
+        val eventTime = if (rawTime > 1000000000000L) rawTime / 1000L else rawTime
+        val timeMatch = when (activityWindow) {
+            "24 hours" -> eventTime == 0L || nowSeconds - eventTime <= 86400L
+            "7 days" -> eventTime == 0L || nowSeconds - eventTime <= 604800L
+            else -> true
+        }
+        timeMatch && (activityQuery.isBlank() || searchText.contains(activityQuery, true))
+    }
 
     Box(Modifier.fillMaxSize()) {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp).padding(bottom = 154.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -357,6 +389,13 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 StatCard("TOTAL USERS", users.size, Red, Icons.Default.Groups, Modifier.weight(1f))
                 StatCard("INVITATIONS", invites.size, Color(0xFFB8BBC0), Icons.Default.ConfirmationNumber, Modifier.weight(1f))
                 StatCard("DISABLED", off, Color(0xFFFFB547), Icons.Default.Block, Modifier.weight(1f))
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton({ featureDialog = "notifications" }) { Icon(Icons.Default.Notifications, null, tint = Cyan); Text("Alerts", color = Color.White) }
+                TextButton({ featureDialog = "diagnostics"; diagnosticResult = "" }) { Icon(Icons.Default.Speed, null, tint = Cyan); Text("Diagnostics", color = Color.White) }
+                TextButton({ featureDialog = "export" }) { Icon(Icons.Default.FileDownload, null, tint = Cyan); Text("Export", color = Color.White) }
             }
         }
         item {
@@ -373,7 +412,20 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         }
         if (msg.isNotEmpty()) item { Text(msg, color = Red) }
         if (tab == 0) {
-            item { Field(q, { q = it }, "Search users") }
+            item {
+                Field(q, { q = it }, "Search users")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("All users", "Active", "Disabled", "Admins").forEach { value ->
+                        FilterChip(selected = userStatus == value, onClick = { userStatus = value }, label = { Text(value, fontSize = 9.sp) })
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Sort:", color = Dim, fontSize = 10.sp)
+                    listOf("Name", "Expiration").forEach { value ->
+                        TextButton({ userSort = value }) { Text(value, color = if (userSort == value) Cyan else Dim, fontSize = 10.sp) }
+                    }
+                }
+            }
             items(shown) { u ->
                 val dis = u.optBoolean("disabled"); val exp = u.optLong("expiry")
                 JCard {
@@ -442,8 +494,16 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             }
         }
         if (tab == 2) {
-            if (acts.isEmpty()) item { Text("No activity loaded.", color = Dim) }
-            items(acts) { x ->
+            item {
+                Field(activityQuery, { activityQuery = it }, "Search activity")
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("All time", "24 hours", "7 days").forEach { value ->
+                        FilterChip(selected = activityWindow == value, onClick = { activityWindow = value }, label = { Text(value, fontSize = 9.sp) })
+                    }
+                }
+            }
+            if (filteredActivities.isEmpty()) item { Text("No matching activity.", color = Dim) }
+            items(filteredActivities) { x ->
                 val t = x.optLong("time")
                 val eventType = x.optString("type").ifBlank { "Activity" }.replace('_', ' ').replace('-', ' ').replaceFirstChar { it.uppercase() }
                 val who = x.optString("username").ifEmpty { x.optString("value") }
@@ -510,6 +570,83 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         }
     }
     }
+
+    if (featureDialog == "notifications") {
+        AlertDialog(onDismissRequest = { featureDialog = "" }, containerColor = CardC,
+            title = { Text("Notification center", color = Color.White) },
+            text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                Text("Recent events from your JFA-GO activity feed", color = Dim, fontSize = 11.sp)
+                acts.take(25).forEach { event ->
+                    val title = event.optString("type").ifBlank { "Activity" }.replace('_', ' ').replaceFirstChar { it.uppercase() }
+                    val detail = event.optString("message").ifBlank { event.optString("description") }.ifBlank { event.optString("username") }
+                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.Top) {
+                        Icon(Icons.Default.Notifications, null, tint = Cyan, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            if (detail.isNotBlank()) Text(detail, color = Dim, fontSize = 10.sp)
+                        }
+                    }
+                    Divider(color = Line)
+                }
+                if (acts.isEmpty()) Text("No recent events.", color = Dim)
+            } },
+            confirmButton = { TextButton({ featureDialog = "" }) { Text("Close", color = Red) } })
+    }
+    if (featureDialog == "diagnostics") {
+        AlertDialog(onDismissRequest = { if (!diagnosticBusy) featureDialog = "" }, containerColor = CardC,
+            title = { Text("Server diagnostics", color = Color.White) },
+            text = { Column {
+                Text(s.name, color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text(s.url, color = Dim, fontSize = 10.sp)
+                Spacer(Modifier.height(10.dp))
+                Text(diagnosticResult.ifBlank { "Run an authenticated server response test." }, color = Cyan, fontSize = 12.sp)
+                if (diagnosticBusy) LinearProgressIndicator(color = Cyan)
+            } },
+            confirmButton = { TextButton(enabled = !diagnosticBusy, onClick = {
+                diagnosticBusy = true
+                scope.launch {
+                    val started = System.nanoTime()
+                    diagnosticResult = try {
+                        withContext(Dispatchers.IO) { api.config() }
+                        "Connection successful · " + ((System.nanoTime() - started) / 1000000L) + " ms"
+                    } catch (e: Exception) { "Connection test failed · " + (e.message ?: "Unknown error") }
+                    diagnosticBusy = false
+                }
+            }) { Text("Test connection", color = Red) } },
+            dismissButton = { TextButton({ featureDialog = "" }) { Text("Close") } })
+    }
+    if (featureDialog == "export") {
+        AlertDialog(onDismissRequest = { featureDialog = "" }, containerColor = CardC,
+            title = { Text("Export workspace data", color = Color.White) },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Share CSV files for users and activity. Passwords and saved credentials are never exported.", color = Dim, fontSize = 11.sp)
+                RedBtn("Export users · CSV", icon = Icons.Default.People) {
+                    val csv = buildString {
+                        append("username,email,admin,disabled,expiry\n")
+                        users.forEach { u ->
+                            val values = listOf(u.optString("name"), u.optString("email"), u.optBoolean("admin").toString(), u.optBoolean("disabled").toString(), u.optLong("expiry").toString())
+                            append(values.joinToString(",") { value -> "\"" + value.replace("\"", "\"\"") + "\"" })
+                            append('\n')
+                        }
+                    }
+                    shareCsv(ctx, "Allerium users.csv", csv)
+                }
+                RedBtn("Export activity · CSV", icon = Icons.Default.History) {
+                    val csv = buildString {
+                        append("time,type,username,details\n")
+                        acts.forEach { a ->
+                            val values = listOf(a.optLong("time").toString(), a.optString("type"), a.optString("username"), a.optString("message").ifBlank { a.optString("description") })
+                            append(values.joinToString(",") { value -> "\"" + value.replace("\"", "\"\"") + "\"" })
+                            append('\n')
+                        }
+                    }
+                    shareCsv(ctx, "Allerium activity.csv", csv)
+                }
+            } },
+            confirmButton = { TextButton({ featureDialog = "" }) { Text("Done", color = Red) } })
+    }
+
     val close = { dlg = ""; target = null }
     if (dlg == "invite" || dlg == "expiry") {
         var a by remember { mutableStateOf(if (dlg == "invite") "7" else "30") }; var b by remember { mutableStateOf("1") }; var st by remember { mutableStateOf("") }; var pf by remember { mutableStateOf("") }
