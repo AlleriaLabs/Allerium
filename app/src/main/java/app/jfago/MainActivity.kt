@@ -140,16 +140,50 @@ data class Srv(val name: String, val url: String, val user: String)
     LaunchedEffect(servers) { servers.forEach { s -> launch(Dispatchers.IO) {
         online[s.url] = try { (URL(s.url).openConnection() as HttpURLConnection).run { connectTimeout = 4000; readTimeout = 4000; responseCode; true } } catch (e: Exception) { false } } } }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item { Header("Jellyfin account admin") }
-        item { Text("Your servers", fontSize = 32.sp) }
+        item { Header("Your secure JFA-GO workspace") }
+        item {
+            Column(Modifier.padding(top = 8.dp, bottom = 2.dp)) {
+                Text("Welcome back", color = Dim, fontSize = 13.sp, letterSpacing = 1.sp)
+                Text("Your servers", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("Choose a server to manage its users and invitations.", color = Dim, fontSize = 13.sp)
+            }
+        }
+        if (servers.isEmpty()) item {
+            JCard {
+                Box(Modifier.fillMaxWidth().padding(vertical = 18.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.Dns, null, tint = Cyan, modifier = Modifier.size(38.dp))
+                        Spacer(Modifier.height(12.dp))
+                        Text("No servers connected", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text("Add your JFA-GO server to get started.", color = Dim, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
         items(servers) { s ->
             JCard(Modifier.clickable { login = s }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) { Text(s.name, fontSize = 26.sp); Text(s.url, color = Dim) }
-                    Spacer(Modifier.width(8.dp))
-                    val o = online[s.url]
-                    Pill(if (o == null) "…" else if (o) "Online" else "Offline", if (o == true) Green else Red)
-                    TextButton({ editing = s }) { Text("Edit", color = Red, fontSize = 18.sp) }
+                    Box(Modifier.size(48.dp).clip(RoundedCornerShape(15.dp))
+                        .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF6E56CF), Color(0xFF159EB8)))),
+                        contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Dns, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                    }
+                    Spacer(Modifier.width(13.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(s.name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                        Text(s.url, color = Dim, fontSize = 11.sp, maxLines = 1)
+                        Spacer(Modifier.height(8.dp))
+                        val o = online[s.url]
+                        Pill(if (o == null) "Checking connection" else if (o) "Server online" else "Unavailable",
+                            if (o == true) Green else if (o == false) Color(0xFFFF8A8A) else Cyan)
+                    }
+                    IconButton({ editing = s }) { Icon(Icons.Default.MoreVert, "Server options", tint = Dim) }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Sign in to manage", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.weight(1f))
+                    Icon(Icons.Default.ArrowForward, null, tint = Cyan, modifier = Modifier.size(18.dp))
                 }
             }
         }
