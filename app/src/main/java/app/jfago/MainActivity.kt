@@ -56,6 +56,16 @@ class MainActivity : ComponentActivity() {
 
 data class Srv(val name: String, val url: String, val user: String)
 
+@Composable private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
+    val masterKey = androidx.security.crypto.MasterKey.Builder(ctx)
+        .setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM).build()
+    return androidx.security.crypto.EncryptedSharedPreferences.create(
+        ctx, "allerium_credentials", masterKey,
+        androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+    )
+}
+
 @Composable fun JCard(m: Modifier = Modifier, c: @Composable ColumnScope.() -> Unit) =
     Column(m.fillMaxWidth().clip(RoundedCornerShape(24.dp))
         .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF17223A), CardC, Color(0xFF101727))))
@@ -72,14 +82,14 @@ data class Srv(val name: String, val url: String, val user: String)
     Row(Modifier.clip(RoundedCornerShape(50)).background(PillC).border(1.dp, Line, RoundedCornerShape(50))
         .padding(horizontal = 13.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         if (dot != null) { Box(Modifier.size(8.dp).clip(CircleShape).background(dot)); Spacer(Modifier.width(8.dp)) }
-        Text(t, fontSize = 12.sp, color = Color(0xFFE4EAF8), fontWeight = FontWeight.Medium)
+        Text(t, fontSize = 10.sp, color = Color(0xFFE4EAF8), fontWeight = FontWeight.Medium)
     }
 
 @Composable fun RedBtn(t: String, enabled: Boolean = true, on: () -> Unit) =
     Box(Modifier.fillMaxWidth().height(54.dp).clip(RoundedCornerShape(17.dp))
         .background(if (enabled) androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Red, Color(0xFF6F8CFF), Cyan)) else androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Line, Line)))
         .clickable(enabled = enabled, onClick = on), contentAlignment = Alignment.Center) {
-        Text(t, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+        Text(t, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
     }
 
 @Composable fun Field(v: String, on: (String) -> Unit, label: String, pw: Boolean = false) =
@@ -87,35 +97,28 @@ data class Srv(val name: String, val url: String, val user: String)
         shape = RoundedCornerShape(16.dp), visualTransformation = if (pw) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Red, focusedLabelColor = Red, unfocusedBorderColor = Line, cursorColor = Red))
 
-@Composable fun Header(sub: String) = Column(Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 10.dp)) {
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
-        .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF202044), Color(0xFF10283B), Color(0xFF11182A))))
-        .border(1.dp, Line, RoundedCornerShape(24.dp))) {
-        Column(Modifier.padding(horizontal = 18.dp, vertical = 18.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.allerium_mark), null, Modifier.size(54.dp))
-                Spacer(Modifier.width(14.dp))
-                Column {
-                    Text("ALLERIUM", color = Color.White, fontSize = 23.sp, letterSpacing = 4.sp, fontWeight = FontWeight.Bold)
-                    Text("BY ALLERIA LABS", color = Cyan, fontSize = 9.sp, letterSpacing = 2.2.sp, fontWeight = FontWeight.SemiBold)
-                }
-                Spacer(Modifier.weight(1f))
-                Box(Modifier.size(9.dp).clip(CircleShape).background(Cyan))
-            }
-            Spacer(Modifier.height(17.dp))
-            Text(sub.uppercase(), color = Dim, fontSize = 11.sp, letterSpacing = 2.1.sp, fontWeight = FontWeight.Medium)
+@Composable fun Header(sub: String) = Column(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp)) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.allerium_mark), null, Modifier.size(34.dp))
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+            Text("ALLERIUM", color = Color.White, fontSize = 15.sp, letterSpacing = 2.4.sp, fontWeight = FontWeight.Bold)
+            Text("ALLERIA LABS", color = Dim, fontSize = 8.sp, letterSpacing = 1.7.sp, fontWeight = FontWeight.Medium)
         }
-        Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(0.42f).height(2.dp)
-            .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Red, Cyan, Color.Transparent))))
+        Box(Modifier.size(7.dp).clip(CircleShape).background(Cyan))
     }
+    Spacer(Modifier.height(8.dp))
+    Text(sub, color = Dim, fontSize = 10.sp, letterSpacing = 0.7.sp, fontWeight = FontWeight.Medium)
+    Spacer(Modifier.height(8.dp))
+    Box(Modifier.fillMaxWidth().height(1.dp).background(Line.copy(alpha = .75f)))
 }
 
 @Composable fun Chips(opts: List<String>, sel: String, on: (String) -> Unit) {
     if (opts.isEmpty()) return
-    Text("Profile", color = Dim, fontSize = 13.sp)
+    Text("Profile", color = Dim, fontSize = 10.sp)
     Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         (listOf("") + opts).forEach { o -> Box(Modifier.clip(RoundedCornerShape(50)).background(if (sel == o) Red else PillC)
-            .clickable { on(o) }.padding(horizontal = 14.dp, vertical = 8.dp)) { Text(o.ifEmpty { "Default" }, fontSize = 14.sp) } }
+            .clickable { on(o) }.padding(horizontal = 14.dp, vertical = 8.dp)) { Text(o.ifEmpty { "Default" }, fontSize = 10.sp) } }
     }
 }
 
@@ -137,15 +140,36 @@ data class Srv(val name: String, val url: String, val user: String)
     var adding by remember { mutableStateOf(false) }
     var login by remember { mutableStateOf<Srv?>(null) }
     val online = remember { mutableStateMapOf<String, Boolean>() }
+    val credentials = remember { credentialPrefs(LocalContext.current) }
+    val scope = rememberCoroutineScope()
+    var authError by remember { mutableStateOf("") }
+    var authenticating by remember { mutableStateOf(false) }
+    fun selectServer(s: Srv) {
+        val stored = credentials.getString(s.url, "").orEmpty()
+        if (stored.isBlank()) { login = s; return }
+        authenticating = true
+        scope.launch {
+            try {
+                val api = Api(s.url)
+                withContext(Dispatchers.IO) { api.login(s.user, stored) }
+                open(s, api)
+            } catch (e: Exception) {
+                authError = e.message ?: "Saved sign-in failed. Please update the password."
+                login = s
+            } finally { authenticating = false }
+        }
+    }
     LaunchedEffect(servers) { servers.forEach { s -> launch(Dispatchers.IO) {
         online[s.url] = try { (URL(s.url).openConnection() as HttpURLConnection).run { connectTimeout = 4000; readTimeout = 4000; responseCode; true } } catch (e: Exception) { false } } } }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { Header("Your secure JFA-GO workspace") }
+        if (authenticating) item { Text("Connecting securely…", color = Cyan, fontSize = 11.sp) }
+        if (authError.isNotBlank()) item { Text(authError, color = Color(0xFFFF8A8A), fontSize = 11.sp) }
         item {
             Column(Modifier.padding(top = 8.dp, bottom = 2.dp)) {
-                Text("Welcome back", color = Dim, fontSize = 13.sp, letterSpacing = 1.sp)
-                Text("Your servers", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                Text("Choose a server to manage its users and invitations.", color = Dim, fontSize = 13.sp)
+                Text("Welcome back", color = Dim, fontSize = 10.sp, letterSpacing = 1.sp)
+                Text("Your servers", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("Choose a server to manage its users and invitations.", color = Dim, fontSize = 10.sp)
             }
         }
         if (servers.isEmpty()) item {
@@ -155,13 +179,13 @@ data class Srv(val name: String, val url: String, val user: String)
                         Icon(Icons.Default.Dns, null, tint = Cyan, modifier = Modifier.size(38.dp))
                         Spacer(Modifier.height(12.dp))
                         Text("No servers connected", color = Color.White, fontWeight = FontWeight.SemiBold)
-                        Text("Add your JFA-GO server to get started.", color = Dim, fontSize = 12.sp)
+                        Text("Add your JFA-GO server to get started.", color = Dim, fontSize = 10.sp)
                     }
                 }
             }
         }
         items(servers) { s ->
-            JCard(Modifier.clickable { login = s }) {
+            JCard(Modifier.clickable(enabled = !authenticating) { selectServer(s) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(48.dp).clip(RoundedCornerShape(15.dp))
                         .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF6E56CF), Color(0xFF159EB8)))),
@@ -170,8 +194,8 @@ data class Srv(val name: String, val url: String, val user: String)
                     }
                     Spacer(Modifier.width(13.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(s.name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-                        Text(s.url, color = Dim, fontSize = 11.sp, maxLines = 1)
+                        Text(s.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                        Text(s.url, color = Dim, fontSize = 10.sp, maxLines = 1)
                         Spacer(Modifier.height(8.dp))
                         val o = online[s.url]
                         Pill(if (o == null) "Checking connection" else if (o) "Server online" else "Unavailable",
@@ -181,7 +205,7 @@ data class Srv(val name: String, val url: String, val user: String)
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Sign in to manage", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Sign in to manage", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.weight(1f))
                     Icon(Icons.Default.ArrowForward, null, tint = Cyan, modifier = Modifier.size(18.dp))
                 }
@@ -193,21 +217,41 @@ data class Srv(val name: String, val url: String, val user: String)
         val old = editing
         var n by remember { mutableStateOf(old?.name ?: "") }; var u by remember { mutableStateOf(old?.url ?: "https://") }
         var us by remember { mutableStateOf(old?.user ?: "") }
+        var pw by remember { mutableStateOf(if (old == null) "" else credentials.getString(old.url, "").orEmpty()) }
         val close = { adding = false; editing = null }
         AlertDialog(close, containerColor = CardC, title = { Text(if (old == null) "Add server" else "Edit server") },
-            text = { Column { Field(n, { n = it }, "Name"); Field(u, { u = it.trim() }, "URL"); Field(us, { us = it }, "Username") } },
-            confirmButton = { TextButton({ val s = Srv(n, u.trimEnd('/'), us); save(if (old == null) servers + s else servers.map { if (it == old) s else it }); close() }) { Text("Save", color = Red) } },
+            text = { Column {
+                Field(n, { n = it }, "Server name")
+                Field(u, { u = it.trim() }, "Server URL")
+                Field(us, { us = it }, "Username")
+                Field(pw, { pw = it }, "Password", true)
+                Text("Password is stored encrypted on this device and used for automatic sign-in.", color = Dim, fontSize = 10.sp)
+            } },
+            confirmButton = { TextButton(enabled = n.isNotBlank() && u.isNotBlank() && us.isNotBlank() && (pw.isNotBlank() || old != null),
+                onClick = {
+                    val normalized = u.trim().trimEnd('/')
+                    val s = Srv(n.trim(), normalized, us.trim())
+                    if (old != null && old.url != normalized) credentials.edit().remove(old.url).apply()
+                    if (pw.isNotBlank()) credentials.edit().putString(normalized, pw).apply()
+                    save(if (old == null) servers + s else servers.map { if (it == old) s else it })
+                    close()
+                }) { Text("Save", color = Red) } },
             dismissButton = { Row { if (old != null) TextButton({ save(servers - old); close() }) { Text("Delete", color = Red) }; TextButton(close) { Text("Cancel") } } })
     }
     login?.let { s ->
-        var pw by remember { mutableStateOf("") }; var err by remember { mutableStateOf("") }; var busy by remember { mutableStateOf(false) }
+        var pw by remember { mutableStateOf(credentials.getString(s.url, "").orEmpty()) }; var err by remember { mutableStateOf(authError) }; var busy by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
         AlertDialog({ login = null }, containerColor = CardC, title = { Text(s.name) },
             text = { Column { Field(pw, { pw = it }, "Password for ${s.user}", true); if (err.isNotEmpty()) Text(err, color = Red) } },
             confirmButton = { TextButton({
                 busy = true; err = ""
-                scope.launch { try { val a = Api(s.url); withContext(Dispatchers.IO) { a.login(s.user, pw) }; login = null; open(s, a) }
-                    catch (e: Exception) { err = e.message ?: "Failed" }; busy = false }
+                scope.launch { try {
+                    val a = Api(s.url)
+                    withContext(Dispatchers.IO) { a.login(s.user, pw) }
+                    credentials.edit().putString(s.url, pw).apply()
+                    authError = ""; login = null; open(s, a)
+                } catch (e: Exception) { err = e.message ?: "Failed" }
+                busy = false }
             }, enabled = !busy) { Text(if (busy) "…" else "Sign in", color = Red) } },
             dismissButton = { TextButton({ login = null }) { Text("Cancel") } })
     }
@@ -246,8 +290,8 @@ data class Srv(val name: String, val url: String, val user: String)
                             Box(Modifier.size(9.dp).clip(CircleShape).background(tint))
                         }
                         Spacer(Modifier.height(13.dp))
-                        Text("$value", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text(label, fontSize = 9.sp, color = Dim, letterSpacing = 1.sp, maxLines = 1)
+                        Text("$value", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(label, fontSize = 8.sp, color = Dim, letterSpacing = 1.sp, maxLines = 1)
                     }
                 }
             }
@@ -256,8 +300,8 @@ data class Srv(val name: String, val url: String, val user: String)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(if (tab == 0) "Directory" else listOf("Directory", "Invitations", "Activity", "Settings")[tab],
-                        fontSize = 25.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Text("Manage your JFA-GO server", color = Dim, fontSize = 12.sp)
+                        fontSize = 21.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("Manage your JFA-GO server", color = Dim, fontSize = 10.sp)
                 }
                 IconButton({ refresh() }, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PillC)) {
                     Icon(Icons.Default.Refresh, "Refresh", tint = Cyan)
@@ -272,7 +316,7 @@ data class Srv(val name: String, val url: String, val user: String)
                     Box(Modifier.weight(1f).clip(RoundedCornerShape(13.dp))
                         .background(if (tab == i) Color(0xFF293454) else Color.Transparent)
                         .clickable { tab = i }.padding(vertical = 11.dp), contentAlignment = Alignment.Center) {
-                        Text(t, fontSize = 11.sp, fontWeight = if (tab == i) FontWeight.SemiBold else FontWeight.Normal,
+                        Text(t, fontSize = 10.sp, fontWeight = if (tab == i) FontWeight.SemiBold else FontWeight.Normal,
                             color = if (tab == i) Color.White else Dim, maxLines = 1)
                     }
                 }
@@ -290,15 +334,15 @@ data class Srv(val name: String, val url: String, val user: String)
                         Box(Modifier.size(46.dp).clip(RoundedCornerShape(15.dp))
                             .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF6E56CF), Color(0xFF1A9DB8)))),
                             contentAlignment = Alignment.Center) {
-                            Text(u.optString("name").firstOrNull()?.uppercase() ?: "U", fontSize = 20.sp,
+                            Text(u.optString("name").firstOrNull()?.uppercase() ?: "U", fontSize = 10.sp,
                                 color = Color.White, fontWeight = FontWeight.Bold)
                         }
                         Spacer(Modifier.width(13.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(u.optString("name"), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            Text(u.optString("name"), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                             val em = u.optString("email")
                             Text(em.ifEmpty { if (u.optBoolean("admin")) "Administrator" else "JFA-GO account" },
-                                color = Dim, fontSize = 12.sp, maxLines = 1)
+                                color = Dim, fontSize = 10.sp, maxLines = 1)
                         }
                         Pill(if (u.optBoolean("admin")) "ADMIN" else if (dis) "DISABLED" else "ACTIVE",
                             if (dis) Color(0xFFFF8A8A) else Green)
@@ -309,7 +353,7 @@ data class Srv(val name: String, val url: String, val user: String)
                             Icon(Icons.Default.Schedule, null, tint = Dim, modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("Expires " + DateFormat.getDateInstance().format(Date(if (exp > 1e12) exp else exp * 1000)),
-                                color = Dim, fontSize = 12.sp)
+                                color = Dim, fontSize = 10.sp)
                         }
                     }
                     Spacer(Modifier.height(12.dp))
@@ -318,12 +362,12 @@ data class Srv(val name: String, val url: String, val user: String)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Switch(!dis, { on -> act { api.setEnabled(u.getString("id"), on) } },
                                 colors = SwitchDefaults.colors(checkedTrackColor = Cyan, checkedThumbColor = Color.White))
-                            Text(if (dis) "Disabled" else "Enabled", fontSize = 11.sp, color = Dim)
+                            Text(if (dis) "Disabled" else "Enabled", fontSize = 10.sp, color = Dim)
                         }
                         Spacer(Modifier.weight(1f))
                         TextButton({ target = u; dlg = "expiry" }) {
                             Icon(Icons.Default.Schedule, null, tint = Dim, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp)); Text("Expiry", color = Dim, fontSize = 12.sp)
+                            Spacer(Modifier.width(4.dp)); Text("Expiry", color = Dim, fontSize = 10.sp)
                         }
                         IconButton({ target = u; dlg = "del" }) { Icon(Icons.Default.DeleteOutline, "Delete", tint = Color(0xFFFF8A8A)) }
                     }
@@ -341,8 +385,8 @@ data class Srv(val name: String, val url: String, val user: String)
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(code, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-                            Text("Uses remaining · " + i.optString("remaining-uses").ifEmpty { "Unlimited" }, color = Dim, fontSize = 12.sp)
+                            Text(code, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            Text("Uses remaining · " + i.optString("remaining-uses").ifEmpty { "Unlimited" }, color = Dim, fontSize = 10.sp)
                         }
                         IconButton({ (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("invite", "${api.base}/invite/$code")) }) {
                             Icon(Icons.Default.ContentCopy, "Copy invite link", tint = Cyan)
@@ -358,10 +402,10 @@ data class Srv(val name: String, val url: String, val user: String)
                 val t = x.optLong("time")
                 JCard { Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(x.optString("type").replaceFirstChar { it.uppercase() }, fontSize = 18.sp)
+                        Text(x.optString("type").replaceFirstChar { it.uppercase() }, fontSize = 15.sp)
                         val who = x.optString("username").ifEmpty { x.optString("value") }
                         if (who.isNotEmpty()) Text(who, color = Dim)
-                        if (t > 0) Text(DateFormat.getDateTimeInstance().format(Date(if (t > 1e12) t else t * 1000)), color = Dim, fontSize = 13.sp)
+                        if (t > 0) Text(DateFormat.getDateTimeInstance().format(Date(if (t > 1e12) t else t * 1000)), color = Dim, fontSize = 10.sp)
                     }
                     IconButton({ act { api.deleteActivity(x.getString("id")) } }) { Icon(Icons.Default.Delete, "Delete", tint = Red) } } }
             }
@@ -370,7 +414,7 @@ data class Srv(val name: String, val url: String, val user: String)
             val c = cfg
             if (c == null) item { Text("Loading settings…", color = Dim) } else c.keys().forEach { sec ->
                 val st = c.optJSONObject(sec)?.optJSONObject("settings") ?: return@forEach
-                item(key = "h$sec") { Text(c.getJSONObject(sec).optJSONObject("meta")?.optString("name").orEmpty().ifEmpty { sec }, color = Red, fontSize = 20.sp) }
+                item(key = "h$sec") { Text(c.getJSONObject(sec).optJSONObject("meta")?.optString("name").orEmpty().ifEmpty { sec }, color = Red, fontSize = 10.sp) }
                 st.keys().forEach { k ->
                     val o = st.getJSONObject(k); val bool = o.optString("type") == "bool"
                     item(key = "$sec.$k") { JCard(Modifier.clickable(enabled = !bool) { cfgEdit = Triple(sec, k, o) }) { Row(verticalAlignment = Alignment.CenterVertically) {
@@ -413,7 +457,7 @@ data class Srv(val name: String, val url: String, val user: String)
     cfgEdit?.let { (sec, k, o) ->
         var v by remember { mutableStateOf(if (o.optString("type") == "password") "" else o.opt("value")?.toString().orEmpty()) }
         AlertDialog({ cfgEdit = null }, containerColor = CardC, title = { Text(o.optString("name", k)) },
-            text = { Column { val d = o.optString("description"); if (d.isNotEmpty()) Text(d, color = Dim, fontSize = 13.sp)
+            text = { Column { val d = o.optString("description"); if (d.isNotEmpty()) Text(d, color = Dim, fontSize = 10.sp)
                 Field(v, { v = it }, sec, o.optString("type") == "password") } },
             confirmButton = { TextButton({ cfgEdit = null
                 setCfg(sec, k, if (o.optString("type") == "number") (v.toIntOrNull() ?: v) else v) }) { Text("Save", color = Red) } },
