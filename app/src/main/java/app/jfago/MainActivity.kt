@@ -274,7 +274,9 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         shape = RoundedCornerShape(16.dp), visualTransformation = if (pw) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Red, focusedLabelColor = Red, unfocusedBorderColor = Line, cursorColor = Red))
 
-@Composable fun Header(sub: String) = Column(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp)) {
+@Composable fun Header(sub: String, actions: @Composable () -> Unit = {
+    Box(Modifier.size(7.dp).clip(CircleShape).background(Cyan))
+}) = Column(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp)) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.allerium_mark), null, Modifier.size(40.dp))
         Spacer(Modifier.width(10.dp))
@@ -323,7 +325,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     val scope = rememberCoroutineScope()
     var authError by remember { mutableStateOf("") }
     var authenticating by remember { mutableStateOf(false) }
-    var backupMessage by remember { mutableStateOf("") }
+    var backupMessage by remember { mutableStateOf("") }\n    var backupMenuExpanded by remember { mutableStateOf(false) }
     fun handleExportBackup(uri: android.net.Uri?) {
         if (uri != null) {
             try {
@@ -372,6 +374,26 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             }
         }
     }
+    fun launchServerBackupExport() {
+        try {
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("application/json").putExtra(Intent.EXTRA_TITLE, "Allerium-server-backup.json")
+            (fragmentActivity(context) as? MainActivity)?.launchFilePicker(4101, intent, ::handleExportBackup)
+                ?: throw IllegalStateException("Main activity is unavailable.")
+        } catch (e: Exception) {
+            backupMessage = "Could not open Android save picker: " + (e.message ?: e.javaClass.simpleName)
+        }
+    }
+    fun launchServerBackupImport() {
+        try {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("*/*")
+            (fragmentActivity(context) as? MainActivity)?.launchFilePicker(4102, intent, ::handleImportBackup)
+                ?: throw IllegalStateException("Main activity is unavailable.")
+        } catch (e: Exception) {
+            backupMessage = "Could not open Android file picker: " + (e.message ?: e.javaClass.simpleName)
+        }
+    }
     fun connectWithStoredPassword(s: Srv, password: String) {
         authenticating = true
         scope.launch {
@@ -402,7 +424,28 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         online[s.url] = try { (URL(s.url).openConnection() as HttpURLConnection).run { connectTimeout = 4000; readTimeout = 4000; responseCode; true } } catch (e: Exception) { false } } } }
     Box(Modifier.fillMaxSize()) {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 88.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { Header("Your secure JFA-GO workspace") }
+        item {
+            Header("Your secure JFA-GO workspace") {
+                Box {
+                    IconButton(onClick = { backupMenuExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Server options", tint = Dim)
+                    }
+                    DropdownMenu(expanded = backupMenuExpanded, onDismissRequest = { backupMenuExpanded = false },
+                        modifier = Modifier.background(CardC)) {
+                        DropdownMenuItem(
+                            text = { Text("Create server backup", color = Color.White) },
+                            leadingIcon = { Icon(Icons.Default.FileDownload, null, tint = Cyan) },
+                            onClick = { backupMenuExpanded = false; launchServerBackupExport() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Restore server backup", color = Color.White) },
+                            leadingIcon = { Icon(Icons.Default.Restore, null, tint = Cyan) },
+                            onClick = { backupMenuExpanded = false; launchServerBackupImport() }
+                        )
+                    }
+                }
+            }
+        }
         if (authenticating) item { Text("Connecting securely…", color = Cyan, fontSize = 11.sp) }
         if (authError.isNotBlank()) item { Text(authError, color = Color(0xFFFF8A8A), fontSize = 11.sp) }
         item {
@@ -410,56 +453,6 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 Text("Welcome back", color = Dim, fontSize = 10.sp, letterSpacing = 1.sp)
                 Text("Your servers", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 Text("Manage your JFA-GO workspace.", color = Dim, fontSize = 12.sp)
-            }
-        }
-        item {
-            JCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Backup, null, tint = Cyan, modifier = Modifier.size(22.dp))
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Server backup", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Text("Save or restore your server connection profiles.", color = Dim, fontSize = 10.sp)
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = { try {
-                            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
-                                .setType("application/json").putExtra(Intent.EXTRA_TITLE, "Allerium-server-backup.json")
-                            (fragmentActivity(context) as? MainActivity)?.launchFilePicker(4101, intent, ::handleExportBackup)
-                                ?: throw IllegalStateException("Main activity is unavailable.")
-                        } catch (e: Exception) { backupMessage = "Could not open Android save picker: " + (e.message ?: e.javaClass.simpleName) } },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, Line)
-                    ) {
-                        Icon(Icons.Default.FileDownload, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Create backup", fontSize = 11.sp)
-                    }
-                    OutlinedButton(
-                        onClick = { try {
-                            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
-                            (fragmentActivity(context) as? MainActivity)?.launchFilePicker(4102, intent, ::handleImportBackup)
-                                ?: throw IllegalStateException("Main activity is unavailable.")
-                        } catch (e: Exception) { backupMessage = "Could not open Android file picker: " + (e.message ?: e.javaClass.simpleName) } },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, Line)
-                    ) {
-                        Icon(Icons.Default.Restore, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Restore backup", fontSize = 11.sp)
-                    }
-                }
-                if (backupMessage.isNotBlank()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(backupMessage, color = Cyan, fontSize = 10.sp)
-                }
-                Text("For safety, backups include server names, URLs and usernames only. Saved passwords and biometric unlock settings are never exported.",
-                    color = Dim, fontSize = 9.sp)
             }
         }
         if (servers.isEmpty()) item {
@@ -513,6 +506,15 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         Spacer(Modifier.width(8.dp))
         Text("Add server", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
     }
+    }
+    if (backupMessage.isNotBlank()) {
+        AlertDialog(
+            onDismissRequest = { backupMessage = "" },
+            containerColor = CardC,
+            title = { Text("Server backup", color = Color.White) },
+            text = { Text(backupMessage, color = Dim, fontSize = 12.sp) },
+            confirmButton = { TextButton(onClick = { backupMessage = "" }) { Text("Done", color = Red) } }
+        )
     }
     if (adding || editing != null) {
         val old = editing
