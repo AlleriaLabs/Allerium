@@ -1,7 +1,5 @@
 package app.jfago
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -81,9 +79,8 @@ fun AdvancedModulesDialog(
 
     val context = LocalContext.current
     var pendingDownloadName by remember { mutableStateOf("") }
-    val backupDownloadLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/octet-stream")
-    ) { uri ->
+    val hostActivity = fragmentActivity(context) as? MainActivity
+    fun handleBackupDownload(uri: android.net.Uri?) {
         if (uri != null) {
             val filename = pendingDownloadName
             execute("Backup downloaded") {
@@ -93,9 +90,7 @@ fun AdvancedModulesDialog(
             }
         }
     }
-    val backupUploadLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
+    fun handleBackupUpload(uri: android.net.Uri?) {
         if (uri != null) {
             execute("Restore upload submitted") {
                 val input = context.contentResolver.openInputStream(uri)
@@ -301,7 +296,9 @@ fun AdvancedModulesDialog(
                                 }
                             }) { Text("Refresh list", fontSize = 10.sp) }
                             OutlinedButton(enabled = !busy, onClick = {
-                                backupUploadLauncher.launch(arrayOf("*/*"))
+                                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+                                hostActivity?.launchFilePicker(4202, intent, ::handleBackupUpload)
+                                    ?: run { feedback = "Main activity is unavailable." }
                             }) { Text("Upload & restore", fontSize = 10.sp) }
                         }
                         backups.forEach { backup ->
@@ -314,7 +311,10 @@ fun AdvancedModulesDialog(
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     OutlinedButton(enabled = !busy && name.isNotBlank(), onClick = {
                                         pendingDownloadName = name
-                                        backupDownloadLauncher.launch(name)
+                                        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                                            .setType("application/octet-stream").putExtra(Intent.EXTRA_TITLE, name)
+                                        hostActivity?.launchFilePicker(4201, intent, ::handleBackupDownload)
+                                            ?: run { feedback = "Main activity is unavailable." }
                                     }) { Text("Download", fontSize = 10.sp) }
                                     OutlinedButton(enabled = !busy && name.isNotBlank(), onClick = { restoreTarget = name }) {
                                         Text("Restore", color = Color(0xFFFFC36B), fontSize = 10.sp)
