@@ -426,7 +426,29 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     Box(Modifier.fillMaxSize()) {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 88.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
-            Header("Your secure JFA-GO workspace")
+            Header("Your secure JFA-GO workspace") {
+                Box {
+                    IconButton(onClick = { backupMenuExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Backup options", tint = Dim)
+                    }
+                    DropdownMenu(
+                        expanded = backupMenuExpanded,
+                        onDismissRequest = { backupMenuExpanded = false },
+                        modifier = Modifier.background(CardC)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Create server backup", color = Color.White) },
+                            leadingIcon = { Icon(Icons.Default.FileDownload, null, tint = Cyan) },
+                            onClick = { backupMenuExpanded = false; launchServerBackupExport() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Restore server backup", color = Color.White) },
+                            leadingIcon = { Icon(Icons.Default.Restore, null, tint = Cyan) },
+                            onClick = { backupMenuExpanded = false; launchServerBackupImport() }
+                        )
+                    }
+                }
+            }
         }
         if (authenticating) item { Text("Connecting securely…", color = Cyan, fontSize = 11.sp) }
         if (authError.isNotBlank()) item { Text(authError, color = Color(0xFFFF8A8A), fontSize = 11.sp) }
@@ -488,6 +510,15 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         Spacer(Modifier.width(8.dp))
         Text("Add server", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
     }
+    }
+    if (backupMessage.isNotBlank()) {
+        AlertDialog(
+            onDismissRequest = { backupMessage = "" },
+            containerColor = CardC,
+            title = { Text("Server backup", color = Color.White) },
+            text = { Text(backupMessage, color = Dim, fontSize = 12.sp) },
+            confirmButton = { TextButton(onClick = { backupMessage = "" }) { Text("Done", color = Red) } }
+        )
     }
     if (adding || editing != null) {
         val old = editing
