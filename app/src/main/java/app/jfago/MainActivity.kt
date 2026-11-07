@@ -655,6 +655,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     var profs by remember { mutableStateOf(listOf<String>()) }
     var q by remember { mutableStateOf("") }
     var userStatus by remember { mutableStateOf("All users") }
+    var inviteQuery by remember { mutableStateOf("") }
     var userSort by remember { mutableStateOf("Name") }
     var activityQuery by remember { mutableStateOf("") }
     var activityWindow by remember { mutableStateOf("All time") }
@@ -1106,8 +1107,11 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 }
             }
         } else if (tab == 1) {
-            item { RedBtn("Create invitation", icon = Icons.Default.AddLink) { dlg = "invite" } }
-            items(invites) { i ->
+            item {
+                RedBtn("Create invitation", icon = Icons.Default.AddLink) { dlg = "invite" }
+                Field(inviteQuery, { inviteQuery = it }, "Search invitations")
+            }
+            items(invites.filter { inviteQuery.isBlank() || it.optString("code").contains(inviteQuery, true) || it.optString("label").contains(inviteQuery, true) }) { i ->
                 val code = i.optString("code")
                 JCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1284,7 +1288,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             "global-search" -> GlobalSearchPage(users, invites, acts, globalSearchQuery,
                 onQueryChange = { globalSearchQuery = it },
                 onOpenUsers = { term -> q = term; tab = 0; workspacePage = "" },
-                onOpenInvites = { term -> globalSearchQuery = term; tab = 1; workspacePage = "" },
+                onOpenInvites = { term -> inviteQuery = term; tab = 1; workspacePage = "" },
                 onOpenActivity = { term -> activityQuery = term; tab = 2; workspacePage = "" },
                 onBack = { workspacePage = "" })
             "dashboard-settings" -> DashboardSettingsPage(
