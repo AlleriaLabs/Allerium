@@ -662,7 +662,6 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     var diagnosticChecks by remember { mutableStateOf<List<DiagnosticCheck>>(emptyList()) }
     var diagnosticBusy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
-    var backupMenuExpanded by remember { mutableStateOf(false) }
     var backupMessage by remember { mutableStateOf("") }
     var dlg by remember { mutableStateOf("") }; var target by remember { mutableStateOf<JSONObject?>(null) }
     var resetLink by remember { mutableStateOf("") }
@@ -869,52 +868,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     if (workspacePage.isEmpty()) {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 142.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
-            Header(s.name) {
-                Box {
-                    IconButton(onClick = { backupMenuExpanded = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Server options", tint = Dim)
-                    }
-                    DropdownMenu(expanded = backupMenuExpanded, onDismissRequest = { backupMenuExpanded = false },
-                        modifier = Modifier.background(CardC)) {
-                        DropdownMenuItem(
-                            text = { Text(if (unreadNotificationCount > 0) "Alerts · $unreadNotificationCount new" else "Alerts", color = Color.White) },
-                            leadingIcon = { Icon(Icons.Default.Notifications, null, tint = Cyan) },
-                            onClick = { backupMenuExpanded = false; workspacePage = "notifications" }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Diagnostics", color = Color.White) },
-                            leadingIcon = { Icon(Icons.Default.Speed, null, tint = Cyan) },
-                            onClick = { backupMenuExpanded = false; workspacePage = "diagnostics"; diagnosticChecks = emptyList() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Operations center", color = Color.White) },
-                            leadingIcon = { Icon(Icons.Default.Analytics, null, tint = Cyan) },
-                            onClick = { backupMenuExpanded = false; workspacePage = "operations" }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Export workspace data", color = Color.White) },
-                            leadingIcon = { Icon(Icons.Default.FileDownload, null, tint = Cyan) },
-                            onClick = { backupMenuExpanded = false; workspacePage = "export" }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("All tools", color = Color.White) },
-                            leadingIcon = { Icon(Icons.Default.Tune, null, tint = Cyan) },
-                            onClick = { backupMenuExpanded = false; workspacePage = "tools" }
-                        )
-                        HorizontalDivider(color = Line)
-                        DropdownMenuItem(
-                            text = { Text("Create server backup", color = Color.White) },
-                            leadingIcon = { Icon(Icons.Default.Save, null, tint = Cyan) },
-                            onClick = { backupMenuExpanded = false; launchBackupExport() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Restore server backup", color = Color.White) },
-                            leadingIcon = { Icon(Icons.Default.Restore, null, tint = Cyan) },
-                            onClick = { backupMenuExpanded = false; launchBackupImport() }
-                        )
-                    }
-                }
-            }
+            Header(s.name)
         }
         if (tab < 3) item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1000,19 +954,24 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                     Triple("Invitations", "Edit invite details, labels and recipients.", Icons.Default.ConfirmationNumber),
                     Triple("Backups", "Browse, download, upload and restore server backups.", Icons.Default.Backup),
                     Triple("Settings", "Inspect and manage supported JFA-GO configuration.", Icons.Default.Settings),
-                    Triple("Integrations", "Manage available integration modules.", Icons.Default.Extension)
+                    Triple("Integrations", "Manage available integration modules.", Icons.Default.Extension),
+                    Triple("About Allerium", "Branding, app information and version details.", Icons.Default.Info)
                 ).forEach { item ->
                     JCard(Modifier.clickable {
-                        initialToolModule = when (item.first) {
-                            "User management" -> "Users"
-                            "Messages" -> "Messages"
-                            "Invitations" -> "Invites"
-                            "Backups" -> "Backups"
-                            "Settings" -> "Settings"
-                            "Integrations" -> "Integrations"
-                            else -> "Users"
+                        if (item.first == "About Allerium") {
+                            workspacePage = "about"
+                        } else {
+                            initialToolModule = when (item.first) {
+                                "User management" -> "Users"
+                                "Messages" -> "Messages"
+                                "Invitations" -> "Invites"
+                                "Backups" -> "Backups"
+                                "Settings" -> "Settings"
+                                "Integrations" -> "Integrations"
+                                else -> "Users"
+                            }
+                            workspacePage = "tools"
                         }
-                        workspacePage = "tools"
                     }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(item.third, null, tint = Cyan, modifier = Modifier.size(22.dp))
@@ -1266,6 +1225,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 }
             }, onBack = { workspacePage = "" })
             "export" -> ExportWorkspacePage(users, acts, ctx, onBack = { workspacePage = "" })
+            "about" -> AboutAlleriumPage(onBack = { workspacePage = "" })
         }
     }
     }
@@ -1346,6 +1306,68 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             text = { Column { Field(n, { n = it }, "Username"); Field(p, { p = it }, "Password", true); Field(e, { e = it }, "Email (optional)"); Chips(profs, pf) { pf = it } } },
             confirmButton = { TextButton({ close(); act { api.createUser(n, p, e, pf) } }) { Text("Create", color = Red) } },
             dismissButton = { TextButton(close) { Text("Cancel") } })
+    }
+}
+
+@Composable
+private fun AboutAlleriumPage(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val appInfo = remember(context) {
+        try {
+            val info = if (Build.VERSION.SDK_INT >= 33) {
+                context.packageManager.getPackageInfo(context.packageName,
+                    android.content.pm.PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+            val code = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else {
+                @Suppress("DEPRECATION")
+                info.versionCode.toLong()
+            }
+            "${info.versionName ?: "Unknown"} ($code)"
+        } catch (_: Exception) { "Unavailable" }
+    }
+    Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
+            Column {
+                Text("About Allerium", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                Text("Application details and branding", color = Dim, fontSize = 10.sp)
+            }
+        }
+        JCard {
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.foundation.Image(
+                painter = androidx.compose.ui.res.painterResource(R.drawable.allerium_mark),
+                contentDescription = "Allerium logo",
+                modifier = Modifier.size(88.dp).align(Alignment.CenterHorizontally))
+            Spacer(Modifier.height(12.dp))
+            Text("ALLERIUM", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold,
+                letterSpacing = 3.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+            Text("ALLERIA LABS", color = Cyan, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                letterSpacing = 2.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+            Spacer(Modifier.height(8.dp))
+            Text("A secure mobile companion for managing your JFA-GO server.", color = Dim,
+                fontSize = 12.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        }
+        JCard {
+            Text("App information", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(10.dp))
+            listOf("Application" to "Allerium", "Version" to appInfo,
+                "Developer" to "Alleria Labs", "Platform" to "Android",
+                "Package" to context.packageName).forEachIndexed { index, pair ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text(pair.first, color = Dim, fontSize = 11.sp)
+                    Text(pair.second, color = Color.White, fontSize = 11.sp)
+                }
+                if (index < 4) HorizontalDivider(color = Line, modifier = Modifier.padding(vertical = 9.dp))
+            }
+        }
+        Text("Part of the Alleria Labs product family.", color = Dim, fontSize = 10.sp,
+            modifier = Modifier.align(Alignment.CenterHorizontally))
     }
 }
 
