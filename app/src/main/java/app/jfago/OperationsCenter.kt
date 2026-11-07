@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit
 private data class AuditEntry(val time: Long, val method: String, val path: String, val status: Int, val success: Boolean)
 
 @Composable
-fun OperationsCenterDialog(
+fun OperationsCenterPage(
     api: Api,
     server: Srv,
     users: List<JSONObject>,
@@ -86,13 +86,16 @@ fun OperationsCenterDialog(
         ms > now - 7L * 86400000L && ms <= now
     }
 
-    AlertDialog(
-        onDismissRequest = { if (!busy) onClose() },
-        containerColor = CardC,
-        title = { Text("Operations center", color = Color.White) },
-        text = {
-            Column(Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            IconButton(onClick = { if (!busy) onClose() }) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
+            Column(Modifier.weight(1f)) {
+                Text("Control Center", color = Color.White, fontSize = 21.sp)
+                Text("Analytics, audit, health, backups and security", color = Dim, fontSize = 10.sp)
+            }
+        }
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf("Analytics", "Audit", "Health", "Backups", "Security").forEach { item ->
                         FilterChip(selected = section == item, onClick = { section = item },
@@ -238,7 +241,5 @@ fun OperationsCenterDialog(
                 }
                 if (feedback.isNotBlank()) Text(feedback, color = Cyan, fontSize = 10.sp)
             }
-        },
-        confirmButton = { TextButton(enabled = !busy, onClick = onClose) { Text("Done", color = Red) } }
-    )
+    }
 }
