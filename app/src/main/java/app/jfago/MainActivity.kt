@@ -920,7 +920,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                             Text("Analytics & audit", color = Color.White, fontWeight = FontWeight.SemiBold)
                             Text("Account trends, API audit events and export.", color = Dim, fontSize = 10.sp)
                         }
-                        IconButton(onClick = { featureDialog = "operations" }) { Icon(Icons.Default.ChevronRight, null, tint = Cyan) }
+                        IconButton(onClick = { workspacePage = "operations" }) { Icon(Icons.Default.ChevronRight, null, tint = Cyan) }
                     }
                     TextButton(onClick = { featureDialog = "operations" }) { Text("Open Control Center", color = Cyan) }
                 }
@@ -933,7 +933,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                             Text("$unreadNotificationCount unread · account expiry and recent activity", color = Dim, fontSize = 10.sp)
                         }
                     }
-                    TextButton(onClick = { featureDialog = "notifications" }) { Text("View notifications", color = Cyan) }
+                    TextButton(onClick = { workspacePage = "notifications" }) { Text("View notifications", color = Cyan) }
                 }
                 JCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -944,12 +944,12 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                             Text("Authenticated endpoint checks and response times.", color = Dim, fontSize = 10.sp)
                         }
                     }
-                    TextButton(onClick = { featureDialog = "diagnostics"; diagnosticChecks = emptyList() }) { Text("Run diagnostics", color = Cyan) }
+                    TextButton(onClick = { workspacePage = "diagnostics"; diagnosticChecks = emptyList() }) { Text("Run diagnostics", color = Cyan) }
                 }
                 JCard {
                     Text("Workspace data", color = Color.White, fontWeight = FontWeight.SemiBold)
                     Text("Export users and activity as CSV files.", color = Dim, fontSize = 10.sp)
-                    TextButton(onClick = { featureDialog = "export" }) { Text("Export data", color = Cyan) }
+                    TextButton(onClick = { workspacePage = "export" }) { Text("Export data", color = Cyan) }
                 }
                 RedBtn("Refresh server data", icon = Icons.Default.Refresh) { refresh() }
             }
@@ -1203,7 +1203,8 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     }
     }
 
-    } else {
+    }
+    if (workspacePage.isNotEmpty()) {
         when (workspacePage) {
             "operations" -> OperationsCenterPage(api, s, users, invites, acts, onClose = { workspacePage = "" }, onLogout = { workspacePage = ""; back() })
             "tools" -> AdvancedModulesPage(api, users, invites, profs, onClose = { workspacePage = "" }, onRefresh = { refresh() }, onMessage = { msg = it })
@@ -1221,7 +1222,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             "export" -> ExportWorkspacePage(users, acts, ctx, onBack = { workspacePage = "" })
         }
     }
-
+    }
 
     val close = { dlg = ""; target = null }
     if (dlg == "reset-confirm") target?.let { u ->
@@ -1375,10 +1376,10 @@ private fun ExportWorkspacePage(users: List<JSONObject>, acts: List<JSONObject>,
             Text("${users.size} accounts · usernames, email, roles and expiry", color = Dim, fontSize = 10.sp)
             RedBtn("Export users · CSV", icon = Icons.Default.People) {
                 val csv = buildString {
-                    append("username,email,admin,disabled,expiry\\n")
+                    append("username,email,admin,disabled,expiry\n")
                     users.forEach { u ->
                         val values = listOf(u.optString("name"), u.optString("email"), u.optBoolean("admin").toString(), u.optBoolean("disabled").toString(), u.optLong("expiry").toString())
-                        append(values.joinToString(",") { "\"" + it.replace("\"", "\"\"") + "\"" }); append('\\n')
+                        append(values.joinToString(",") { "\"" + it.replace("\"", "\"\"") + "\"" }); append('\n')
                     }
                 }
                 shareCsv(context, "Allerium users.csv", csv)
@@ -1389,7 +1390,7 @@ private fun ExportWorkspacePage(users: List<JSONObject>, acts: List<JSONObject>,
             Text("${acts.size} activity records", color = Dim, fontSize = 10.sp)
             RedBtn("Export activity · CSV", icon = Icons.Default.History) {
                 val csv = buildString {
-                    append("time,type,username,details\\n")
+                    append("time,type,username,details\n")
                     acts.forEach { item ->
                         val values = listOf(item.optLong("time").toString(), item.optString("type"), item.optString("username"), item.optString("message").ifBlank { item.optString("description") })
                         append(values.joinToString(",") { "\"" + it.replace("\"", "\"\"") + "\"" }); append('\\n')
