@@ -81,7 +81,9 @@ class MainActivity : FragmentActivity() {
         if (enabled && backgroundAt > 0L && System.currentTimeMillis() - backgroundAt >= timeoutMinutes * 60_000L) lockRequired = true
     }
     override fun onStop() {
-        appSecurityPrefs.edit().putLong("background_at", System.currentTimeMillis()).apply()
+        if (!isChangingConfigurations) {
+            appSecurityPrefs.edit().putLong("background_at", System.currentTimeMillis()).apply()
+        }
         super.onStop()
     }
     fun completeAppUnlock() {
@@ -760,7 +762,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 .put("version", 1)
                 .put("createdAt", System.currentTimeMillis())
                 .put("servers", JSONArray(servers.map { server ->
-                    JSONObject().put("name", server.name).put("url", server.url).put("user", server.user)
+                    JSONObject().put("name", server.name).put("url", server.url).put("user", server.user).put("group", server.group)
                 }))
             val stream = ctx.contentResolver.openOutputStream(uri)
                 ?: throw IllegalStateException("Could not open the selected backup destination.")
@@ -788,7 +790,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 val user = item.optString("user").trim()
                 if (name.isBlank() || url.isBlank() || user.isBlank()) continue
                 if (merged.any { it.url.equals(url, ignoreCase = true) }) continue
-                merged.add(Srv(name, url, user))
+                merged.add(Srv(name, url, user, item.optString("group")))
                 added++
             }
             if (added > 0) saveServers(merged)
