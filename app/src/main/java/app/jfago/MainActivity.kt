@@ -346,6 +346,9 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     var userSort by remember { mutableStateOf("Name") }
     var activityQuery by remember { mutableStateOf("") }
     var activityWindow by remember { mutableStateOf("All time") }
+    var activityType by remember { mutableStateOf("All types") }
+    var activitySort by remember { mutableStateOf("Newest") }
+    var expandedActivity by remember { mutableStateOf("") }
     var featureDialog by remember { mutableStateOf("") }
     var diagnosticResult by remember { mutableStateOf("") }
     var diagnosticBusy by remember { mutableStateOf(false) }
@@ -373,17 +376,25 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         else -> list.sortedBy { it.optString("name").lowercase() }
     } }
     val nowSeconds = System.currentTimeMillis() / 1000L
+    val activityTypes = acts.map { it.optString("type").ifBlank { "Activity" } }
+        .distinct().sorted()
     val filteredActivities = acts.filter { item ->
-        val type = item.optString("type")
+        val type = item.optString("type").ifBlank { "Activity" }
         val searchText = type + " " + item.optString("username") + " " + item.optString("value") + " " + item.optString("message") + " " + item.optString("description")
         val rawTime = item.optLong("time")
         val eventTime = if (rawTime > 1000000000000L) rawTime / 1000L else rawTime
+        val age = if (eventTime > 0L) nowSeconds - eventTime else Long.MAX_VALUE
         val timeMatch = when (activityWindow) {
-            "24 hours" -> eventTime == 0L || nowSeconds - eventTime <= 86400L
-            "7 days" -> eventTime == 0L || nowSeconds - eventTime <= 604800L
+            "24 hours" -> age in 0..86400L
+            "7 days" -> age in 0..604800L
+            "30 days" -> age in 0..2592000L
             else -> true
         }
-        timeMatch && (activityQuery.isBlank() || searchText.contains(activityQuery, true))
+        val typeMatch = activityType == "All types" || type == activityType
+        timeMatch && typeMatch && (activityQuery.isBlank() || searchText.contains(activityQuery, true))
+    }.let { list ->
+        if (activitySort == "Oldest") list.sortedBy { it.optLong("time") }
+        else list.sortedByDescending { it.optLong("time") }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -504,19 +515,52 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         }
         if (tab == 2) {
             item {
-                Field(activityQuery, { activityQuery = it }, "Search activity")
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("All time", "24 hours", "7 days").forEach { value ->
+                Field(activityQuery, { activityQuery = it }, "Search events, users or details")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("All time", "24 hours", "7 days", "30 days").forEach { value ->
                         FilterChip(selected = activityWindow == value, onClick = { activityWindow = value }, label = { Text(value, fontSize = 9.sp) })
                     }
                 }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Event type", color = Dim, fontSize = 10.sp)
+                    Spacer(Modifier.width(8.dp))
+                    androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        item {
+                            FilterChip(selected = activityType == "All types", onClick = { activityType = "All types" }, label = { Text("All", fontSize = 9.sp) })
+                        }
+                        items(activityTypes) { type ->
+                            FilterChip(selected = activityType == type, onClick = { activityType = type }, label = { Text(type.replace('_', ' ').replace('-', ' '), fontSize = 9.sp) })
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${filteredActivities.size} matching events", color = Dim, fontSize = 10.sp)
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = { activitySort = if (activitySort == "Newest") "Oldest" else "Newest" }) {
+                        Icon(Icons.Default.Sort, null, tint = Cyan, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(activitySort, color = Cyan, fontSize = 10.sp)
+                    }
+                    TextButton(onClick = { activityQuery = ""; activityWindow = "All time"; activityType = "All types"; activitySort = "Newest" }) {
+                        Text("Clear", color = Dim, fontSize = 10.sp)
+                    }
+                }
             }
-            if (filteredActivities.isEmpty()) item { Text("No matching activity.", color = Dim) }
+            if (filteredActivities.isEmpty()) item {
+                JCard {
+                    Icon(Icons.Default.HistoryToggleOff, null, tint = Dim, modifier = Modifier.size(26.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Text(if (acts.isEmpty()) "No activity has been recorded yet." else "No events match these filters.", color = Dim, fontSize = 12.sp)
+                }
+            }
             items(filteredActivities) { x ->
                 val t = x.optLong("time")
-                val eventType = x.optString("type").ifBlank { "Activity" }.replace('_', ' ').replace('-', ' ').replaceFirstChar { it.uppercase() }
+                val rawType = x.optString("type").ifBlank { "Activity" }
+                val eventType = rawType.replace('_', ' ').replace('-', ' ').replaceFirstChar { it.uppercase() }
                 val who = x.optString("username").ifEmpty { x.optString("value") }
                 val detail = x.optString("message").ifEmpty { x.optString("description") }
+                val eventId = x.optString("id").ifBlank { "${rawType}_${t}_${who}" }
+                val expanded = expandedActivity == eventId
                 val glyph = when {
                     eventType.contains("creat", true) -> Icons.Default.PersonAdd
                     eventType.contains("delet", true) || eventType.contains("remov", true) -> Icons.Default.PersonRemove
@@ -525,7 +569,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                     eventType.contains("enabl", true) -> Icons.Default.CheckCircle
                     else -> Icons.Default.History
                 }
-                JCard {
+                JCard(Modifier.clickable { expandedActivity = if (expanded) "" else eventId }) {
                     Row(verticalAlignment = Alignment.Top) {
                         Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Red.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
                             Icon(glyph, null, tint = Red, modifier = Modifier.size(19.dp))
@@ -534,9 +578,21 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(eventType, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                             if (who.isNotBlank()) Text(who, color = Dim, fontSize = 12.sp)
-                            if (detail.isNotBlank()) Text(detail, color = Dim, fontSize = 11.sp)
+                            if (detail.isNotBlank()) Text(detail, color = Dim, fontSize = 11.sp, maxLines = if (expanded) Int.MAX_VALUE else 2)
                             if (t > 0) Text(DateFormat.getDateTimeInstance().format(Date(if (t > 1e12) t else t * 1000)), color = Dim, fontSize = 10.sp)
+                            if (expanded) {
+                                Spacer(Modifier.height(5.dp))
+                                Text("Tap again to collapse", color = Cyan, fontSize = 9.sp)
+                                val extra = x.keys().asSequence().filter { key ->
+                                    key !in setOf("id", "type", "username", "value", "message", "description", "time")
+                                }.toList()
+                                extra.forEach { key ->
+                                    val value = x.optString(key)
+                                    if (value.isNotBlank() && value != "null") Text("${key.replace('_', ' ')}: $value", color = Dim, fontSize = 10.sp)
+                                }
+                            }
                         }
+                        Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null, tint = Dim, modifier = Modifier.size(18.dp))
                     }
                 }
             }
