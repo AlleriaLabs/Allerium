@@ -76,8 +76,13 @@ fun OperationsCenterPage(
         loadBackupHistory()
         try {
             val config = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { api.config() }
-            backupRetention = config.optJSONObject("backups")?.optString("keep_n_backups")
-                ?.takeIf { it.isNotBlank() } ?: "20"
+            val sections = config.optJSONArray("sections") ?: JSONArray()
+            val backupsSection = (0 until sections.length()).mapNotNull { sections.optJSONObject(it) }
+                .firstOrNull { it.optString("section") == "backups" }
+            val settings = backupsSection?.optJSONArray("settings") ?: JSONArray()
+            val retentionSetting = (0 until settings.length()).mapNotNull { settings.optJSONObject(it) }
+                .firstOrNull { it.optString("setting") == "keep_n_backups" }
+            backupRetention = retentionSetting?.opt("value")?.toString()?.takeIf { it.isNotBlank() } ?: "20"
         } catch (_: Exception) { /* Keep the documented JFA-GO default if config cannot be read. */ }
     }
 
