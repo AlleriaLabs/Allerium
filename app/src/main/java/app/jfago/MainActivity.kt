@@ -491,7 +491,10 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 88.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Header("Your secure JFA-GO workspace") {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy((-8).dp)
+                ) {
                     IconButton(onClick = { aboutOpen = true }) {
                         Icon(Icons.Default.Info, contentDescription = "About Allerium", tint = Cyan)
                     }
