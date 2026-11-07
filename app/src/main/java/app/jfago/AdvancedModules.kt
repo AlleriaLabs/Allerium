@@ -3,6 +3,7 @@ package app.jfago
 import android.content.Intent
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -114,14 +115,19 @@ fun AdvancedModulesDialog(
         text = {
             Column(
                 Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                // Keep the module selector on one line; narrow phones can scroll it horizontally.
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     listOf("Users", "Messages", "Invites", "Backups", "Settings", "Integrations").forEach { name ->
                         FilterChip(
                             selected = module == name,
                             onClick = { module = name },
-                            label = { Text(name, fontSize = 9.sp) }
+                            label = { Text(name, fontSize = 9.sp, maxLines = 1) }
                         )
                     }
                 }
@@ -131,7 +137,7 @@ fun AdvancedModulesDialog(
                     "Users" -> {
                         Text("Bulk user management", color = Color.White, fontSize = 13.sp)
                         Text("${selectedUsers.size} selected · ${users.size} loaded", color = Dim, fontSize = 10.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = {
                                 selectedUsers.clear()
                                 selectedUsers.addAll(users.map { it.optString("id") }.filter { it.isNotBlank() })
@@ -157,7 +163,7 @@ fun AdvancedModulesDialog(
                             }
                         }
                         Divider(color = Line)
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedButton(enabled = !busy && selectedUsers.isNotEmpty(), onClick = {
                                 execute("Enable users") { api.bulkSetEnabled(selectedUsers.toList(), true) }
                             }) { Text("Enable", fontSize = 10.sp) }
@@ -217,7 +223,7 @@ fun AdvancedModulesDialog(
                         Field(subject, { subject = it }, "Email subject")
                         Field(announcement, { announcement = it }, "Message (Markdown supported)")
                         Field(templateName, { templateName = it }, "Template name")
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedButton(enabled = !busy && subject.isNotBlank() && announcement.isNotBlank() && selectedUsers.isNotEmpty(),
                                 onClick = { execute("Announcement sent") { api.announce(selectedUsers.toList(), subject, announcement) } }) {
                                 Text("Send announcement", fontSize = 10.sp)
@@ -268,7 +274,7 @@ fun AdvancedModulesDialog(
                                 Field(inviteLabel, { inviteLabel = it }, "Invite label")
                                 Field(inviteUserLabel, { inviteUserLabel = it }, "Label applied to new users")
                                 Field(inviteRecipient, { inviteRecipient = it }, "Send to email / Discord username")
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     OutlinedButton(enabled = !busy && selectedInvite.isNotBlank(), onClick = {
                                         execute("Invite updated") { api.editInvite(selectedInvite, inviteLabel, inviteUserLabel, selectedProfile) }
                                     }) { Text("Save changes", fontSize = 10.sp) }
@@ -282,7 +288,7 @@ fun AdvancedModulesDialog(
                     "Backups" -> {
                         Text("JFA-GO database backups", color = Color.White, fontSize = 13.sp)
                         Text("These are server-side database backups, separate from Allerium's connection-profile JSON backup. Restoring a backup restarts JFA-GO.", color = Dim, fontSize = 10.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedButton(enabled = !busy, onClick = {
                                 execute("Database backup created") {
                                     api.createServerBackup()
@@ -310,7 +316,7 @@ fun AdvancedModulesDialog(
                                 Text("Date: " + backup.optLong("date").takeIf { it > 0 }?.let {
                                     DateFormat.getDateTimeInstance().format(Date(it * 1000L))
                                 }.orEmpty() + " · Size: " + backup.optString("size"), color = Dim, fontSize = 9.sp)
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     OutlinedButton(enabled = !busy && name.isNotBlank(), onClick = {
                                         pendingDownloadName = name
                                         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
