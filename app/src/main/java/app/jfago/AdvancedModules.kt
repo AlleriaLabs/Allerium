@@ -40,6 +40,8 @@ fun AdvancedModulesDialog(
     val selectedUsers = remember { mutableStateListOf<String>() }
     var expiryDays by remember { mutableStateOf("30") }
     var label by remember { mutableStateOf("") }
+    var emailAddress by remember { mutableStateOf("") }
+    var jfaAdminAccess by remember { mutableStateOf(false) }
     var selectedProfile by remember { mutableStateOf(profiles.firstOrNull().orEmpty()) }
     var subject by remember { mutableStateOf("") }
     var announcement by remember { mutableStateOf("") }
@@ -181,6 +183,22 @@ fun AdvancedModulesDialog(
                         OutlinedButton(enabled = !busy && selectedUsers.isNotEmpty() && label.isNotBlank(), onClick = {
                             execute("User labels updated") { api.setUserLabels(selectedUsers.associateWith { label.trim() }) }
                         }) { Text("Apply label", fontSize = 10.sp) }
+
+                        Field(emailAddress, { emailAddress = it }, "Set email for selected users (blank clears)")
+                        OutlinedButton(enabled = !busy && selectedUsers.isNotEmpty(), onClick = {
+                            val ids = selectedUsers.toList()
+                            val address = emailAddress.trim()
+                            execute("User email addresses updated") { api.setUserEmails(ids.associateWith { address }) }
+                        }) { Text("Apply email", fontSize = 10.sp) }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = jfaAdminAccess, onCheckedChange = { jfaAdminAccess = it })
+                            Text("Grant selected users access to JFA-GO admin", color = Dim, fontSize = 10.sp)
+                        }
+                        OutlinedButton(enabled = !busy && selectedUsers.isNotEmpty(), onClick = {
+                            val ids = selectedUsers.toList()
+                            val allowed = jfaAdminAccess
+                            execute("JFA-GO admin access updated") { api.setJfaAdminAccess(ids.associateWith { allowed }) }
+                        }) { Text("Apply admin access", fontSize = 10.sp) }
                         if (profiles.isNotEmpty()) {
                             Chips(profiles, selectedProfile) { selectedProfile = it }
                             OutlinedButton(enabled = !busy && selectedUsers.isNotEmpty(), onClick = {
