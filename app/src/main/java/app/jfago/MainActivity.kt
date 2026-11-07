@@ -152,13 +152,14 @@ internal fun fragmentActivity(context: Context): FragmentActivity? {
     return current as? FragmentActivity
 }
 
-private fun showBiometricPrompt(
+internal fun showBiometricPrompt(
     context: Context,
     title: String,
     subtitle: String,
     onSuccess: () -> Unit,
     onPasswordFallback: () -> Unit,
-    onError: (String) -> Unit
+    onError: (String) -> Unit,
+    negativeButtonText: String = "Use password"
 ) {
     val activity = fragmentActivity(context)
     if (activity == null) {
@@ -189,7 +190,7 @@ private fun showBiometricPrompt(
         .setTitle(title)
         .setSubtitle(subtitle)
         .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-        .setNegativeButtonText("Use password")
+        .setNegativeButtonText(negativeButtonText)
         .build()
     prompt.authenticate(info)
 }
@@ -394,14 +395,24 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         }
     }
     fun launchServerBackupImport() {
-        try {
-            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
-                .setType("*/*")
-            (fragmentActivity(context) as? MainActivity)?.launchFilePicker(4102, intent, ::handleImportBackup)
-                ?: throw IllegalStateException("Main activity is unavailable.")
-        } catch (e: Exception) {
-            backupMessage = "Could not open Android file picker: " + (e.message ?: e.javaClass.simpleName)
+        fun openPicker() {
+            try {
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                    .setType("*/*")
+                (fragmentActivity(context) as? MainActivity)?.launchFilePicker(4102, intent, ::handleImportBackup)
+                    ?: throw IllegalStateException("Main activity is unavailable.")
+            } catch (e: Exception) {
+                backupMessage = "Could not open Android file picker: " + (e.message ?: e.javaClass.simpleName)
+            }
         }
+        val protectedServer = servers.firstOrNull { biometricPrefs.getBoolean(it.url, false) }
+        if (protectedServer == null) openPicker()
+        else showBiometricPrompt(context, "Confirm backup restore",
+            "Verify to restore Allerium server profiles",
+            onSuccess = ::openPicker,
+            onPasswordFallback = { backupMessage = "Restore cancelled. Biometric verification is required." },
+            onError = { backupMessage = "Restore cancelled: $it" },
+            negativeButtonText = "Cancel")
     }
     fun connectWithStoredPassword(s: Srv, password: String) {
         authenticating = true
@@ -543,11 +554,12 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 Field(us, { us = it }, "Username")
                 Field(pw, { pw = it }, "Password", true)
                 Text("Password is stored encrypted on this device and used for automatic sign-in.", color = Dim, fontSize = 10.sp)
-                if (old != null && credentials.getString(old.url, "").orEmpty().isNotBlank()) {
+                if ((old != null && credentials.getString(old.url, "").orEmpty().isNotBlank()) ||
+                    (old == null && pw.isNotBlank())) {
                     Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("Biometric sign-in", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            Text("Require strong fingerprint or face verification before using the saved password.",
+                            Text("Biometric protection", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Require fingerprint or face verification before adding or saving this server.",
                                 color = Dim, fontSize = 9.sp)
                         }
                         Switch(checked = biometricEnabled, onCheckedChange = { enable ->
@@ -555,31 +567,42 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                                 biometricEnabled = false
                                 biometricNotice = ""
                             } else {
-                                showBiometricPrompt(context, "Enable biometric sign-in",
-                                    "Verify your identity to protect this server's saved credentials",
-                                    onSuccess = { biometricEnabled = true; biometricNotice = "Biometric sign-in enabled." },
-                                    onPasswordFallback = { biometricNotice = "Use biometric verification to enable this feature." },
-                                    onError = { biometricNotice = it })
+                                showBiometricPrompt(context, "Enable biometric protection",
+                                    "Verify your identity to protect this server",
+                                    onSuccess = { biometricEnabled = true; biometricNotice = "Biometric protection enabled." },
+                                    onPasswordFallback = { biometricNotice = "Biometric verification is required." },
+                                    onError = { biometricNotice = it },
+                                    negativeButtonText = "Cancel")
                             }
                         })
                     }
                     if (biometricNotice.isNotBlank()) Text(biometricNotice, color = Cyan, fontSize = 10.sp)
-                    Text("Only Android strong biometrics are accepted. Some face unlock systems may not qualify. You can always choose password sign-in.",
-                        color = Dim, fontSize = 9.sp)
+                    Text("Only Android strong biometrics are accepted.", color = Dim, fontSize = 9.sp)
                 }
             } },
             confirmButton = { TextButton(enabled = n.isNotBlank() && u.isNotBlank() && us.isNotBlank() && (pw.isNotBlank() || old != null),
                 onClick = {
-                    val normalized = u.trim().trimEnd('/')
-                    val s = Srv(n.trim(), normalized, us.trim())
-                    if (old != null && old.url != normalized) {
-                        credentials.edit().remove(old.url).apply()
-                        biometricPrefs.edit().remove(old.url).apply()
+                    fun persistServer() {
+                        val normalized = u.trim().trimEnd('/')
+                        val server = Srv(n.trim(), normalized, us.trim())
+                        if (old != null && old.url != normalized) {
+                            credentials.edit().remove(old.url).apply()
+                            biometricPrefs.edit().remove(old.url).apply()
+                        }
+                        if (pw.isNotBlank()) credentials.edit().putString(normalized, pw).apply()
+                        biometricPrefs.edit().putBoolean(normalized, biometricEnabled).apply()
+                        save(if (old == null) servers + server else servers.map { if (it == old) server else it })
+                        close()
                     }
-                    if (pw.isNotBlank()) credentials.edit().putString(normalized, pw).apply()
-                    if (old != null) biometricPrefs.edit().putBoolean(normalized, biometricEnabled).apply()
-                    save(if (old == null) servers + s else servers.map { if (it == old) s else it })
-                    close()
+                    if (biometricEnabled) {
+                        showBiometricPrompt(context,
+                            if (old == null) "Confirm adding server" else "Confirm server changes",
+                            "Verify before saving ${n.trim()}",
+                            onSuccess = ::persistServer,
+                            onPasswordFallback = { biometricNotice = "Save cancelled. Biometric verification is required." },
+                            onError = { biometricNotice = "Save cancelled: $it" },
+                            negativeButtonText = "Cancel")
+                    } else persistServer()
                 }) { Text("Save", color = Red) } },
             dismissButton = { Row { if (old != null) TextButton({ credentials.edit().remove(old.url).apply(); biometricPrefs.edit().remove(old.url).apply(); save(servers - old); close() }) { Text("Delete", color = Red) }; TextButton(close) { Text("Cancel") } } })
     }
