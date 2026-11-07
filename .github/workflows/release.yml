@@ -1,0 +1,43 @@
+name: Build and publish Allerium release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing version tag to build and publish (for example v2.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.release_tag || github.ref }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+      - name: Build installable APK
+        run: |
+          gradle assembleDebug
+          VERSION=$(grep -E 'versionName = ' app/build.gradle.kts | head -1 | cut -d '"' -f 2)
+          cp app/build/outputs/apk/debug/*.apk "Allerium-${VERSION}.apk"
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          name: Allerium ${{ github.event.inputs.release_tag || github.ref_name }}
+          generate_release_notes: true
+          files: Allerium-*.apk
+          make_latest: true
