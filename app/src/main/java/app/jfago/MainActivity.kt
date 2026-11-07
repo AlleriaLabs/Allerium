@@ -880,14 +880,14 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 }
             }
         }
-        item {
+        if (tab < 3) item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StatCard("TOTAL USERS", users.size, Red, Icons.Default.Groups, Modifier.weight(1f))
                 StatCard("INVITATIONS", invites.size, Color(0xFFB8BBC0), Icons.Default.ConfirmationNumber, Modifier.weight(1f))
                 StatCard("DISABLED", off, Color(0xFFFFB547), Icons.Default.Block, Modifier.weight(1f))
             }
         }
-        item {
+        if (tab < 3) item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(if (tab == 0) "Directory" else if (tab == 1) "Invitations" else "Activity",
@@ -897,6 +897,87 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 IconButton({ refresh() }, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(PillC)) {
                     Icon(Icons.Default.Refresh, "Refresh", tint = Red)
                 }
+            }
+        }
+        if (tab == 3) item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column {
+                    Text("Control Center", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Text("Insights, monitoring and security for ${s.name}", color = Dim, fontSize = 11.sp)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatCard("ACTIVE", users.count { !it.optBoolean("disabled") }, Green, Icons.Default.VerifiedUser, Modifier.weight(1f))
+                    StatCard("EXPIRING", centerAlerts.count { it.category == "Accounts" && it.title.contains("soon") }, Color(0xFFFFB547), Icons.Default.Schedule, Modifier.weight(1f))
+                    StatCard("ALERTS", unreadNotificationCount, Cyan, Icons.Default.Notifications, Modifier.weight(1f))
+                }
+                JCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Analytics, null, tint = Cyan, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Analytics & audit", color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text("Account trends, API audit events and export.", color = Dim, fontSize = 10.sp)
+                        }
+                        IconButton(onClick = { featureDialog = "operations" }) { Icon(Icons.Default.ChevronRight, null, tint = Cyan) }
+                    }
+                    TextButton(onClick = { featureDialog = "operations" }) { Text("Open Control Center", color = Cyan) }
+                }
+                JCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.NotificationsActive, null, tint = Color(0xFFFFB547), modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Notification center", color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text("$unreadNotificationCount unread · account expiry and recent activity", color = Dim, fontSize = 10.sp)
+                        }
+                    }
+                    TextButton(onClick = { featureDialog = "notifications" }) { Text("View notifications", color = Cyan) }
+                }
+                JCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Speed, null, tint = Cyan, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Server diagnostics", color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text("Authenticated endpoint checks and response times.", color = Dim, fontSize = 10.sp)
+                        }
+                    }
+                    TextButton(onClick = { featureDialog = "diagnostics"; diagnosticChecks = emptyList() }) { Text("Run diagnostics", color = Cyan) }
+                }
+                JCard {
+                    Text("Workspace data", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text("Export users and activity as CSV files.", color = Dim, fontSize = 10.sp)
+                    TextButton(onClick = { featureDialog = "export" }) { Text("Export data", color = Cyan) }
+                }
+                RedBtn("Refresh server data", icon = Icons.Default.Refresh) { refresh() }
+            }
+        }
+        if (tab == 4) item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column {
+                    Text("All Tools", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Text("Extended JFA-GO administration modules", color = Dim, fontSize = 11.sp)
+                }
+                listOf(
+                    Triple("User management", "Bulk enable, disable, expiry, labels, email and referrals.", Icons.Default.Groups),
+                    Triple("Messages", "Announcements and reusable message templates.", Icons.Default.MarkEmailRead),
+                    Triple("Invitations", "Edit invite details, labels and recipients.", Icons.Default.ConfirmationNumber),
+                    Triple("Backups", "Browse, download, upload and restore server backups.", Icons.Default.Backup),
+                    Triple("Settings", "Inspect and manage supported JFA-GO configuration.", Icons.Default.Settings),
+                    Triple("Integrations", "Manage available integration modules.", Icons.Default.Extension)
+                ).forEach { item ->
+                    JCard {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(item.third, null, tint = Cyan, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(item.first, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                Text(item.second, color = Dim, fontSize = 10.sp)
+                            }
+                        }
+                    }
+                }
+                RedBtn("Open all modules", icon = Icons.Default.Tune) { advancedModulesOpen = true }
             }
         }
         if (msg.isNotEmpty()) item { Text(msg, color = Red) }
@@ -1075,22 +1156,30 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(CardC)) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val segment = maxWidth / 3
-            val indicatorX by androidx.compose.animation.core.animateDpAsState(segment * tab + segment / 2 - 14.dp, tween(280), label = "navIndicator")
-            Box(Modifier.offset(x = indicatorX).width(28.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Red))
+            val segment = maxWidth / 5
+            val indicatorX by androidx.compose.animation.core.animateDpAsState(segment * tab + segment / 2 - 12.dp, tween(280), label = "navIndicator")
+            Box(Modifier.offset(x = indicatorX).width(24.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Red))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 listOf(
                     Triple("Users", Icons.Default.People, 0),
                     Triple("Invites", Icons.Default.ConfirmationNumber, 1),
-                    Triple("Activity", Icons.Default.Timeline, 2)
+                    Triple("Activity", Icons.Default.Timeline, 2),
+                    Triple("Control", Icons.Default.Dashboard, 3),
+                    Triple("Tools", Icons.Default.Tune, 4)
                 ).forEach { (label, glyph, index) ->
                     val selectedTint by animateColorAsState(if (tab == index) Color.White else Dim, tween(220), label = "bottomNav$index")
-                    Column(Modifier.weight(1f).clickable { tab = index }.padding(top = 11.dp, bottom = 9.dp),
+                    Column(Modifier.weight(1f).clickable { tab = index }.padding(top = 10.dp, bottom = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(glyph, contentDescription = label, tint = selectedTint, modifier = Modifier.size(21.dp))
-                        Spacer(Modifier.height(4.dp))
-                        Text(label, fontSize = 11.sp, color = selectedTint,
-                            fontWeight = if (tab == index) FontWeight.SemiBold else FontWeight.Medium)
+                        Box {
+                            Icon(glyph, contentDescription = label, tint = selectedTint, modifier = Modifier.size(20.dp))
+                            if (index == 3 && unreadNotificationCount > 0) {
+                                Box(Modifier.align(Alignment.TopEnd).offset(x = 5.dp, y = (-3).dp)
+                                    .size(7.dp).clip(CircleShape).background(Cyan))
+                            }
+                        }
+                        Spacer(Modifier.height(3.dp))
+                        Text(label, fontSize = 9.sp, color = selectedTint,
+                            fontWeight = if (tab == index) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
                     }
                 }
             }
