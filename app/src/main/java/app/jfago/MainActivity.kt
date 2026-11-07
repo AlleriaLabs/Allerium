@@ -741,13 +741,24 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         }
     }
     fun launchBackupImport() {
-        try {
-            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
-            (fragmentActivity(ctx) as? MainActivity)?.launchFilePicker(4102, intent, ::importServerBackup)
-                ?: throw IllegalStateException("Main activity is unavailable.")
-        } catch (e: Exception) {
-            backupMessage = "Could not open Android file picker: " + (e.message ?: e.javaClass.simpleName)
+        fun openPicker() {
+            try {
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+                (fragmentActivity(ctx) as? MainActivity)?.launchFilePicker(4102, intent, ::importServerBackup)
+                    ?: throw IllegalStateException("Main activity is unavailable.")
+            } catch (e: Exception) {
+                backupMessage = "Could not open Android file picker: " + (e.message ?: e.javaClass.simpleName)
+            }
         }
+        val protected = ctx.getSharedPreferences("allerium_biometric", Context.MODE_PRIVATE)
+            .getBoolean(s.url, false)
+        if (protected) showBiometricPrompt(ctx, "Confirm backup restore",
+            "Verify to restore Allerium server profiles",
+            onSuccess = ::openPicker,
+            onPasswordFallback = { backupMessage = "Restore cancelled. Biometric verification is required." },
+            onError = { backupMessage = "Restore cancelled: $it" },
+            negativeButtonText = "Cancel")
+        else openPicker()
     }
     LaunchedEffect(Unit) { refresh() }
     if (backupMessage.isNotBlank()) {
@@ -1239,7 +1250,10 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     if (workspacePage.isNotEmpty()) {
         when (workspacePage) {
             "operations" -> OperationsCenterPage(api, s, users, invites, acts, onClose = { workspacePage = "" }, onLogout = { workspacePage = ""; back() })
-            "tools" -> AdvancedModulesPage(api, users, invites, profs, initialModule = initialToolModule, onClose = { workspacePage = "" }, onRefresh = { refresh() }, onMessage = { msg = it })
+            "tools" -> AdvancedModulesPage(api, users, invites, profs,
+                initialModule = initialToolModule,
+                requireBiometricRestore = ctx.getSharedPreferences("allerium_biometric", Context.MODE_PRIVATE).getBoolean(s.url, false),
+                onClose = { workspacePage = "" }, onRefresh = { refresh() }, onMessage = { msg = it })
             "notifications" -> NotificationCenterPage(centerAlerts, readNotificationIds, notificationFilter,
                 onFilter = { notificationFilter = it }, onRead = { markNotificationRead(it) },
                 onReadAll = { markAllNotificationsRead(it) }, onBack = { workspacePage = "" })
