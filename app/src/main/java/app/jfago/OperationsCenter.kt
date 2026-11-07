@@ -53,6 +53,8 @@ fun OperationsCenterPage(
     var audit by remember { mutableStateOf(emptyList<AuditEntry>()) }
     var schedule by remember { mutableStateOf(backupPrefs.getString("schedule_${server.url}", "Off") ?: "Off") }
     var backupHistory by remember { mutableStateOf(emptyList<JSONObject>()) }
+    var backupRetention by remember { mutableStateOf("20") }
+    var retentionLoading by remember { mutableStateOf(false) }
     fun loadBackupHistory() {
         val arr = JSONArray(backupPrefs.getString("history_${server.url}", "[]") ?: "[]")
         backupHistory = (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }.reversed()
@@ -69,7 +71,15 @@ fun OperationsCenterPage(
         }.sortedByDescending { it.time }
     }
 
-    LaunchedEffect(server.url) { loadAudit(); loadBackupHistory() }
+    LaunchedEffect(server.url) {
+        loadAudit()
+        loadBackupHistory()
+        try {
+            val config = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { api.config() }
+            backupRetention = config.optJSONObject("backups")?.optString("keep_n_backups")
+                ?.takeIf { it.isNotBlank() } ?: "20"
+        } catch (_: Exception) { /* Keep the documented JFA-GO default if config cannot be read. */ }
+    }
 
     val now = System.currentTimeMillis()
     val active = users.count { !it.optBoolean("disabled") }
@@ -179,6 +189,26 @@ fun OperationsCenterPage(
                     "Backups" -> {
                         Text("Scheduled database backups", color = Cyan, fontSize = 12.sp)
                         Text("Runs in the background using Android WorkManager. The encrypted saved server password is used; it is never copied into the work request.", color = Dim, fontSize = 9.sp)
+                        JCard {
+                            Text("Server-side backup retention", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Set how many JFA-GO database backups the server keeps. JFA-GO performs cleanup according to this setting when it creates scheduled backups.", color = Dim, fontSize = 9.sp)
+                            Field(backupRetention, { backupRetention = it.filter(Char::isDigit).take(3) }, "Keep backups (1–500)")
+                            OutlinedButton(enabled = !retentionLoading && backupRetention.toIntOrNull() in 1..500,
+                                onClick = {
+                                    retentionLoading = true
+                                    scope.launch {
+                                        try {
+                                            val count = backupRetention.toInt()
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                                api.setConfig("backups", "keep_n_backups", count)
+                                            }
+                                            feedback = "JFA-GO backup retention saved: keep $count backups."
+                                        } catch (e: Exception) {
+                                            feedback = e.message ?: "Could not update backup retention."
+                                        } finally { retentionLoading = false }
+                                    }
+                                }) { Text(if (retentionLoading) "Saving…" else "Save retention setting", fontSize = 9.sp) }
+                        }
                         Text("Schedule: ${schedule}", color = Color.White, fontSize = 11.sp)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedButton(enabled = !busy, onClick = {
@@ -239,7 +269,7 @@ fun OperationsCenterPage(
                             WorkManager.getInstance(context).enqueue(request)
                             feedback = "Backup job queued. Check the result here after it runs."
                         }) { Text("Run backup now", fontSize = 10.sp) }
-                        Text("Android may defer periodic work to protect battery. Retention cleanup is not enabled because the connected JFA-GO backup API does not expose a verified delete endpoint.", color = Dim, fontSize = 9.sp)
+                        Text("Android may defer periodic work to protect battery. Server-side cleanup is handled by JFA-GO using the retention value above; Allerium does not delete backup files directly.", color = Dim, fontSize = 9.sp)
                     }
                     "Security" -> {
                         Text("Session and device security", color = Cyan, fontSize = 12.sp)
