@@ -32,8 +32,24 @@ class Api(server: String) {
         token = JSONObject(call("GET", "/token/login", basic = b)).getString("token")
     }
 
-    private fun list(text: String, key: String): JSONArray =
-        if (text.trim().startsWith("[")) JSONArray(text) else JSONObject(text).optJSONArray(key) ?: JSONArray()
+    private fun list(text: String, key: String): JSONArray {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return JSONArray()
+        if (trimmed.startsWith("[")) return JSONArray(trimmed)
+        if (!trimmed.startsWith("{")) {
+            val preview = trimmed.replace(Regex("\\s+"), " ").take(120)
+            val kind = if (trimmed.startsWith("<!DOCTYPE", true) || trimmed.startsWith("<html", true))
+                "HTML page" else "plain-text response"
+            throw IllegalStateException("Expected JSON from $key endpoint, but the server returned a $kind. The API route may be unavailable or incorrect. Response: $preview")
+        }
+        val root = try { JSONObject(trimmed) } catch (e: Exception) {
+            throw IllegalStateException("The $key endpoint returned malformed JSON: ${e.message ?: "parse error"}")
+        }
+        return root.optJSONArray(key)
+            ?: root.optJSONArray("activity")
+            ?: root.optJSONArray("items")
+            ?: JSONArray()
+    }
 
     fun users(): List<JSONObject> {
         val a = list(call("GET", "/users"), "users")
