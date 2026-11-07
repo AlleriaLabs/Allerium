@@ -633,7 +633,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         readNotificationIds = readNotificationIds + ids
         notificationPrefs.edit().putStringSet("read_${s.url}", readNotificationIds).apply()
     }
-    var advancedModulesOpen by remember { mutableStateOf(false) }
+    var initialToolModule by remember { mutableStateOf("Users") }
     var workspacePage by remember { mutableStateOf("") }
     BackHandler(onBack = { if (workspacePage.isNotEmpty()) workspacePage = "" else back() })
     var diagnosticChecks by remember { mutableStateOf<List<DiagnosticCheck>>(emptyList()) }
@@ -968,7 +968,18 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                     Triple("Settings", "Inspect and manage supported JFA-GO configuration.", Icons.Default.Settings),
                     Triple("Integrations", "Manage available integration modules.", Icons.Default.Extension)
                 ).forEach { item ->
-                    JCard {
+                    JCard(Modifier.clickable {
+                        initialToolModule = when (item.first) {
+                            "User management" -> "Users"
+                            "Messages" -> "Messages"
+                            "Invitations" -> "Invites"
+                            "Backups" -> "Backups"
+                            "Settings" -> "Settings"
+                            "Integrations" -> "Integrations"
+                            else -> "Users"
+                        }
+                        workspacePage = "tools"
+                    }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(item.third, null, tint = Cyan, modifier = Modifier.size(22.dp))
                             Spacer(Modifier.width(10.dp))
@@ -979,7 +990,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                         }
                     }
                 }
-                RedBtn("Open all modules", icon = Icons.Default.Tune) { advancedModulesOpen = true }
+                RedBtn("Open all modules", icon = Icons.Default.Tune) { initialToolModule = "Users"; workspacePage = "tools" }
             }
         }
         if (msg.isNotEmpty()) item { Text(msg, color = Red) }
@@ -1205,7 +1216,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     if (workspacePage.isNotEmpty()) {
         when (workspacePage) {
             "operations" -> OperationsCenterPage(api, s, users, invites, acts, onClose = { workspacePage = "" }, onLogout = { workspacePage = ""; back() })
-            "tools" -> AdvancedModulesPage(api, users, invites, profs, onClose = { workspacePage = "" }, onRefresh = { refresh() }, onMessage = { msg = it })
+            "tools" -> AdvancedModulesPage(api, users, invites, profs, initialModule = initialToolModule, onClose = { workspacePage = "" }, onRefresh = { refresh() }, onMessage = { msg = it })
             "notifications" -> NotificationCenterPage(centerAlerts, readNotificationIds, notificationFilter,
                 onFilter = { notificationFilter = it }, onRead = { markNotificationRead(it) },
                 onReadAll = { markAllNotificationsRead(it) }, onBack = { workspacePage = "" })
