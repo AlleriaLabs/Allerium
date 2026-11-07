@@ -603,7 +603,6 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
 }
 
 @Composable fun Home(s: Srv, api: Api, servers: List<Srv>, saveServers: (List<Srv>) -> Unit, back: () -> Unit) {
-    BackHandler(onBack = back)
     var tab by remember { mutableIntStateOf(0) }
     var users by remember { mutableStateOf(listOf<JSONObject>()) }
     var invites by remember { mutableStateOf(listOf<JSONObject>()) }
@@ -636,6 +635,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     }
     var advancedModulesOpen by remember { mutableStateOf(false) }
     var workspacePage by remember { mutableStateOf("") }
+    BackHandler(onBack = { if (workspacePage.isNotEmpty()) workspacePage = "" else back() })
     var diagnosticChecks by remember { mutableStateOf<List<DiagnosticCheck>>(emptyList()) }
     var diagnosticBusy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
