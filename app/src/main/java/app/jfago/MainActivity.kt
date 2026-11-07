@@ -72,7 +72,7 @@ val PillC = Color(0xFF1C2740)
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        installCrashDiagnostics()
+        installCrashDiagnostics(applicationContext)
         super.onCreate(savedInstanceState)
         window.statusBarColor = Bg.toArgb(); window.navigationBarColor = Bg.toArgb()
         val cs = darkColorScheme(primary = Red, background = Bg, surface = Bg, onSurface = Color.White,
@@ -83,8 +83,8 @@ class MainActivity : FragmentActivity() {
 
 data class Srv(val name: String, val url: String, val user: String)
 
-private fun installCrashDiagnostics() {
-    val app = this
+private fun installCrashDiagnostics(context: Context) {
+    val app = context.applicationContext
     val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
     Thread.setDefaultUncaughtExceptionHandler { thread, error ->
         try {
