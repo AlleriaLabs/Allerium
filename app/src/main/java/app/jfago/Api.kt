@@ -82,7 +82,15 @@ class Api(server: String) {
     }
 
     fun activity(): List<JSONObject> {
-        val a = list(call("GET", "/activity"), "activities")
+        // JFA-GO's /activity API is POST-only. GET /activity serves the admin HTML page.
+        val request = JSONObject()
+            .put("searchTerms", JSONArray())
+            .put("queries", JSONArray())
+            .put("sortByField", "time")
+            .put("ascending", false)
+            .put("limit", 100)
+            .put("page", 0)
+        val a = list(call("POST", "/activity", request), "activities")
         return (0 until a.length()).map { a.getJSONObject(it) }
     }
 
