@@ -50,7 +50,6 @@ fun OperationsCenterDialog(
     var feedback by remember { mutableStateOf("") }
     var audit by remember { mutableStateOf(emptyList<AuditEntry>()) }
     var schedule by remember { mutableStateOf(backupPrefs.getString("schedule_${server.url}", "Off") ?: "Off") }
-    var retention by remember { mutableStateOf(backupPrefs.getInt("retention_${server.url}", 7).toString()) }
     var biometricEnabled by remember { mutableStateOf(context.getSharedPreferences("allerium_biometric", Context.MODE_PRIVATE).getBoolean(server.url, false)) }
     val workName = "allerium_backup_${server.url.hashCode()}"
 
@@ -63,18 +62,6 @@ fun OperationsCenterDialog(
         }.sortedByDescending { it.time }
     }
 
-    DisposableEffect(api, server.url) {
-        api.auditSink = { method, path, status, success ->
-            synchronized(prefs) {
-                val arr = JSONArray(prefs.getString("audit_${server.url}", "[]") ?: "[]")
-                arr.put(JSONObject().put("time", System.currentTimeMillis()).put("method", method)
-                    .put("path", path).put("status", status).put("success", success))
-                while (arr.length() > 500) arr.remove(0)
-                prefs.edit().putString("audit_${server.url}", arr.toString()).apply()
-            }
-        }
-        onDispose { api.auditSink = null }
-    }
     LaunchedEffect(server.url) { loadAudit() }
 
     val now = System.currentTimeMillis()
@@ -187,12 +174,12 @@ fun OperationsCenterDialog(
                             OutlinedButton(enabled = !busy, onClick = {
                                 try {
                                     require(credentials.getString(server.url, null) != null) { "Sign in and save this server password before enabling automation." }
-                                    val interval = if (schedule == "Weekly") 168L else 24L
+                                    val interval = 24L
                                     val request = PeriodicWorkRequestBuilder<ScheduledBackupWorker>(interval, TimeUnit.HOURS)
                                         .setInputData(workDataOf("url" to server.url, "user" to server.user)).build()
                                     WorkManager.getInstance(context).enqueueUniquePeriodicWork(workName,
                                         ExistingPeriodicWorkPolicy.UPDATE, request)
-                                    schedule = if (schedule == "Weekly") "Weekly" else "Daily"
+                                    schedule = "Daily"
                                     backupPrefs.edit().putString("schedule_${server.url}", schedule).apply()
                                     feedback = "Scheduled backup enabled."
                                 } catch (e: Exception) { feedback = e.message ?: "Could not schedule backups." }
