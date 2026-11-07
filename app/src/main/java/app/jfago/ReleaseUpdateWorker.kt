@@ -21,7 +21,8 @@ import java.util.concurrent.TimeUnit
 import org.json.JSONObject
 
 class ReleaseUpdateWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
-    override suspend fun doWork(): Result = try {
+    override suspend fun doWork(): Result {
+        return try {
         val connection = URL("https://api.github.com/repos/AlleriaLabs/Allerium/releases/latest").openConnection() as HttpURLConnection
         connection.connectTimeout = 10000
         connection.readTimeout = 15000
@@ -50,7 +51,8 @@ class ReleaseUpdateWorker(appContext: Context, params: WorkerParameters) : Corou
         showNotification(tag, url)
         prefs.edit().putString("last_notified_tag", tag).apply()
         Result.success()
-    } catch (_: Exception) { Result.retry() }
+        } catch (_: Exception) { Result.retry() }
+    }
 
     private fun showNotification(tag: String, url: String) {
         val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
