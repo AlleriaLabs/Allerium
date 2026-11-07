@@ -101,4 +101,41 @@ class Api(server: String) {
     fun deleteInvite(code: String) {
         call("DELETE", "/invites", JSONObject().put("code", code))
     }
+    fun diagnostics(): List<DiagnosticCheck> {
+        val checks = mutableListOf<DiagnosticCheck>()
+        fun check(label: String, action: () -> String) {
+            val started = System.nanoTime()
+            try {
+                val detail = action()
+                checks += DiagnosticCheck(label, true, (System.nanoTime() - started) / 1_000_000L, detail)
+            } catch (e: Exception) {
+                checks += DiagnosticCheck(label, false, (System.nanoTime() - started) / 1_000_000L,
+                    e.message?.take(180) ?: "Request failed")
+            }
+        }
+        check("Configuration API") {
+            config()
+            "Authenticated configuration endpoint responded"
+        }
+        check("User directory") {
+            val count = users().size
+            "$" + count + " user" + if (count == 1) "" else "s" + " returned"
+        }
+        check("Invitations API") {
+            val count = invites().size
+            "$" + count + " invitation" + if (count == 1) "" else "s" + " returned"
+        }
+        check("Activity feed") {
+            val count = activity().size
+            "$" + count + " activity entr" + if (count == 1) "y" else "ies" + " returned"
+        }
+        return checks
+    }
 }
+
+data class DiagnosticCheck(
+    val label: String,
+    val passed: Boolean,
+    val durationMs: Long,
+    val detail: String
+)
