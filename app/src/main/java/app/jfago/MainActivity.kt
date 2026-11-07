@@ -1451,10 +1451,9 @@ private fun AboutAlleriumPage(onBack: () -> Unit) {
     val context = LocalContext.current
     val appInfo = remember(context) {
         try {
-            val info = if (Build.VERSION.SDK_INT >= 33) {
-                context.packageManager.getPackageInfo(context.packageName,
-                    android.content.pm.PackageManager.PackageInfoFlags.of(0))
-            } else {
+            val info = if (Build.VERSION.SDK_INT >= 33) context.packageManager.getPackageInfo(
+                context.packageName, android.content.pm.PackageManager.PackageInfoFlags.of(0))
+            else {
                 @Suppress("DEPRECATION")
                 context.packageManager.getPackageInfo(context.packageName, 0)
             }
@@ -1467,50 +1466,164 @@ private fun AboutAlleriumPage(onBack: () -> Unit) {
     }
     val scope = rememberCoroutineScope()
     var checking by remember { mutableStateOf(false) }
+    var downloading by remember { mutableStateOf(false) }
     var updateStatus by remember { mutableStateOf("Check GitHub for the latest published Allerium release.") }
     var latestTag by remember { mutableStateOf("") }
     var releaseUrl by remember { mutableStateOf("") }
+    var releaseNotes by remember { mutableStateOf("") }
+    var apkUrl by remember { mutableStateOf("") }
+    var expectedDigest by remember { mutableStateOf("") }
     var updateAvailable by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableIntStateOf(0) }
+    var downloadedApk by remember { mutableStateOf<java.io.File?>(null) }
+
+    fun compareVersions(first: String, second: String): Int {
+        fun parts(value: String) = Regex("\\d+").findAll(value)
+            .map { it.value.toIntOrNull() ?: 0 }.toList()
+        val a = parts(first); val b = parts(second)
+        for (i in 0 until maxOf(a.size, b.size)) {
+            val c = a.getOrElse(i) { 0 }.compareTo(b.getOrElse(i) { 0 })
+            if (c != 0) return c
+        }
+        return 0
+    }
+
     fun checkForUpdate() {
-        if (checking) return
+        if (checking || downloading) return
         checking = true
+        downloadedApk = null
         scope.launch {
             try {
-                val result = withContext(Dispatchers.IO) {
-                    val connection = (URL("https://api.github.com/repos/AlleriaLabs/Allerium/releases/latest").openConnection() as HttpURLConnection)
+                val release = withContext(Dispatchers.IO) {
+                    val connection = URL("https://api.github.com/repos/AlleriaLabs/Allerium/releases/latest")
+                        .openConnection() as HttpURLConnection
                     connection.connectTimeout = 10000
                     connection.readTimeout = 15000
                     connection.setRequestProperty("Accept", "application/vnd.github+json")
                     connection.setRequestProperty("User-Agent", "Allerium-Android")
                     try {
                         val code = connection.responseCode
-                        if (code == 404) throw IllegalStateException("No public Allerium release has been published yet.")
+                        if (code == 404) throw IllegalStateException(
+                            "GitHub could not find a public release. The repository must be public for automatic updates.")
                         if (code >= 400) throw IllegalStateException("GitHub returned HTTP $code.")
-                        val json = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
-                        json.optString("tag_name") to json.optString("html_url")
+                        JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
                     } finally { connection.disconnect() }
                 }
-                latestTag = result.first
-                releaseUrl = result.second
+                latestTag = release.optString("tag_name")
+                releaseUrl = release.optString("html_url")
+                releaseNotes = release.optString("body").ifBlank { "No release notes were provided." }.take(3000)
                 val current = appInfo.substringBefore(" ").trim()
-                fun parts(value: String) = Regex("\\d+").findAll(value).map { it.value.toIntOrNull() ?: 0 }.toList()
-                val latestParts = parts(latestTag)
-                val currentParts = parts(current)
-                val count = maxOf(latestParts.size, currentParts.size)
-                var comparison = 0
-                for (i in 0 until count) {
-                    val x = latestParts.getOrElse(i) { 0 }
-                    val y = currentParts.getOrElse(i) { 0 }
-                    if (x != y) { comparison = x.compareTo(y); break }
+                updateAvailable = !release.optBoolean("draft") && !release.optBoolean("prerelease") &&
+                    compareVersions(latestTag, current) > 0
+                val apk = release.optJSONArray("assets")?.let { assets ->
+                    (0 until assets.length()).map { assets.optJSONObject(it) }
+                        .firstOrNull { it?.optString("name")?.endsWith(".apk", true) == true }
                 }
-                updateAvailable = comparison > 0
-                updateStatus = if (updateAvailable) "A newer release is available. Open GitHub to review its release notes and APK assets."
-                    else "You're using the latest published release, or a build newer than that release."
+                apkUrl = apk?.optString("browser_download_url").orEmpty()
+                expectedDigest = apk?.optString("digest").orEmpty().removePrefix("sha256:")
+                if (updateAvailable && apkUrl.isBlank()) {
+                    updateStatus = "Version $latestTag is available, but its release has no APK asset yet."
+                } else if (updateAvailable) {
+                    updateStatus = "Version $latestTag is ready. Download and install it without leaving Allerium."
+                } else {
+                    updateStatus = "You're using the latest published release, or a build newer than that release."
+                }
             } catch (e: Exception) {
                 updateStatus = e.message ?: "Could not check for updates."
             } finally { checking = false }
         }
     }
+
+    fun downloadUpdate() {
+        if (downloading || apkUrl.isBlank()) return
+        downloading = true
+        downloadProgress = 0
+        updateStatus = "Preparing the update download…"
+        scope.launch {
+            try {
+                val file = withContext(Dispatchers.IO) {
+                    val connection = (URL(apkUrl).openConnection() as HttpURLConnection)
+                    connection.connectTimeout = 15000
+                    connection.readTimeout = 30000
+                    connection.instanceFollowRedirects = true
+                    connection.setRequestProperty("User-Agent", "Allerium-Android")
+                    try {
+                        val code = connection.responseCode
+                        if (code >= 400) throw IllegalStateException("APK download failed (HTTP $code).")
+                        val total = connection.contentLengthLong
+                        val directory = java.io.File(context.cacheDir, "updates").apply { mkdirs() }
+                        val output = java.io.File(directory, "Allerium-$latestTag.apk")
+                        connection.inputStream.use { input ->
+                            java.io.FileOutputStream(output).use { stream ->
+                                val buffer = ByteArray(64 * 1024)
+                                var copied = 0L
+                                while (true) {
+                                    val count = input.read(buffer)
+                                    if (count < 0) break
+                                    stream.write(buffer, 0, count)
+                                    copied += count
+                                    if (total > 0L) {
+                                        val percent = ((copied * 100L) / total).toInt().coerceIn(0, 100)
+                                        scope.launch { downloadProgress = percent }
+                                    }
+                                }
+                                stream.fd.sync()
+                            }
+                        }
+                        if (output.length() == 0L) throw IllegalStateException("The downloaded APK is empty.")
+                        if (expectedDigest.isNotBlank()) {
+                            val digest = java.security.MessageDigest.getInstance("SHA-256")
+                            output.inputStream().use { input ->
+                                val buffer = ByteArray(64 * 1024)
+                                while (true) {
+                                    val count = input.read(buffer)
+                                    if (count < 0) break
+                                    digest.update(buffer, 0, count)
+                                }
+                            }
+                            val actual = digest.digest().joinToString("") { "%02x".format(it) }
+                            if (!actual.equals(expectedDigest, ignoreCase = true)) {
+                                output.delete()
+                                throw IllegalStateException("APK checksum verification failed. Please retry the download.")
+                            }
+                        }
+                        output
+                    } finally { connection.disconnect() }
+                }
+                downloadedApk = file
+                downloadProgress = 100
+                updateStatus = if (expectedDigest.isNotBlank())
+                    "Download complete. SHA-256 checksum verified. Ready to install."
+                else "Download complete. GitHub did not provide a checksum; ready to install."
+            } catch (e: Exception) {
+                updateStatus = e.message ?: "Could not download the update."
+            } finally { downloading = false }
+        }
+    }
+
+    fun installUpdate() {
+        val file = downloadedApk ?: return
+        if (!file.exists()) { updateStatus = "The downloaded APK is missing. Please download it again."; downloadedApk = null; return }
+        try {
+            if (Build.VERSION.SDK_INT >= 26 && !context.packageManager.canRequestPackageInstalls()) {
+                updateStatus = "Allow Allerium to install updates from this source, then return here and tap Install update."
+                context.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    android.net.Uri.parse("package:${context.packageName}")))
+                return
+            }
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context, "${context.packageName}.fileprovider", file)
+            val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                putExtra(Intent.EXTRA_RETURN_RESULT, true)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            updateStatus = e.message ?: "Android could not open the package installer."
+        }
+    }
+
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1537,14 +1650,28 @@ private fun AboutAlleriumPage(onBack: () -> Unit) {
         }
         JCard {
             Text("Software updates", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text(if (latestTag.isBlank()) updateStatus else "Latest published release: $latestTag", color = if (updateAvailable) Cyan else Dim, fontSize = 10.sp)
+            Text(if (latestTag.isBlank()) updateStatus else "Latest published release: $latestTag",
+                color = if (updateAvailable) Cyan else Dim, fontSize = 10.sp)
             if (latestTag.isNotBlank()) Text(updateStatus, color = Dim, fontSize = 10.sp)
-            RedBtn(if (checking) "Checking GitHub…" else "Check for updates", enabled = !checking,
+            if (downloading) {
+                LinearProgressIndicator(progress = { downloadProgress / 100f }, modifier = Modifier.fillMaxWidth())
+                Text("Downloading update… $downloadProgress%", color = Cyan, fontSize = 10.sp)
+            }
+            RedBtn(if (checking) "Checking GitHub…" else "Check for updates", enabled = !checking && !downloading,
                 icon = Icons.Default.SystemUpdate, on = ::checkForUpdate)
-            if (releaseUrl.isNotBlank()) OutlinedButton(onClick = {
-                context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(releaseUrl)))
-            }, modifier = Modifier.fillMaxWidth()) { Text("Open release on GitHub") }
-            Text("The checker reports published releases only. It does not silently install APKs; review and install releases yourself.", color = Dim, fontSize = 9.sp)
+            if (updateAvailable && apkUrl.isNotBlank() && downloadedApk == null) {
+                RedBtn(if (downloading) "Downloading…" else "Download update",
+                    enabled = !downloading, icon = Icons.Default.Download, on = ::downloadUpdate)
+            }
+            if (downloadedApk != null) {
+                RedBtn("Install update", icon = Icons.Default.InstallMobile, on = ::installUpdate)
+            }
+            if (releaseNotes.isNotBlank() && updateAvailable) {
+                Text("What's new", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(releaseNotes, color = Dim, fontSize = 10.sp)
+            }
+            Text("Updates download inside Allerium. Android will ask you to approve installation. If prompted, allow Allerium to install unknown apps in Android settings, then return and tap Install update.",
+                color = Dim, fontSize = 9.sp)
         }
         JCard {
             Text("App information", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -1564,7 +1691,6 @@ private fun AboutAlleriumPage(onBack: () -> Unit) {
             modifier = Modifier.align(Alignment.CenterHorizontally))
     }
 }
-
 @Composable
 private fun NotificationCenterPage(
     alerts: List<CenterAlert>, readIds: Set<String>, filter: String,

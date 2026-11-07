@@ -61,15 +61,15 @@ class ReleaseUpdateWorker(appContext: Context, params: WorkerParameters) : Corou
                 description = "Notifications when a new Allerium version is published on GitHub"
             }
         )
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        val intent = Intent(applicationContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val pending = PendingIntent.getActivity(applicationContext, 7302, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(applicationContext, CHANNEL_ID)
             else @Suppress("DEPRECATION") Notification.Builder(applicationContext)
         val notification = builder.setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle("Allerium update available")
-            .setContentText("Version $tag is ready. Tap to view release notes and download the APK.")
-            .setStyle(Notification.BigTextStyle().bigText("Allerium $tag is available on GitHub. Tap to view the release notes and download the latest APK."))
+            .setContentText("Version $tag is ready. Open Allerium to download and install it.")
+            .setStyle(Notification.BigTextStyle().bigText("Allerium $tag is available. Open the app to review the release notes and install the update."))
             .setContentIntent(pending).setAutoCancel(true).build()
         manager.notify(NOTIFICATION_ID, notification)
     }
