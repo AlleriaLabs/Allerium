@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.HttpURLConnection
@@ -237,4 +238,30 @@ fun UpdateAvailableDialog(update: UpdateInfo, onDismiss: () -> Unit) {
             TextButton(enabled = !working, onClick = onDismiss) { Text("Later") }
         }
     )
+}
+
+
+@Composable
+fun AutomaticUpdatePrompt(enabled: Boolean) {
+    val context = LocalContext.current
+    var update by remember { mutableStateOf<UpdateInfo?>(null) }
+    var checkedForLaunch by remember { mutableStateOf(false) }
+
+    LaunchedEffect(enabled) {
+        if (enabled && !checkedForLaunch) {
+            delay(1500)
+            update = runCatching { UpdateChecker.checkForUpdate(context) }.getOrNull()
+            checkedForLaunch = true
+        }
+    }
+
+    update?.let { available ->
+        UpdateAvailableDialog(
+            update = available,
+            onDismiss = {
+                UpdateChecker.dismissUpdate(context, available.tag)
+                update = null
+            }
+        )
+    }
 }
