@@ -9,8 +9,6 @@ import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -71,6 +69,26 @@ val Green = Color(0xFF43D9A3)
 val PillC = Color(0xFF1C2740)
 
 class MainActivity : FragmentActivity() {
+    private val filePickerCallbacks = mutableMapOf<Int, (android.net.Uri?) -> Unit>()
+
+    fun launchFilePicker(requestCode: Int, intent: Intent, onResult: (android.net.Uri?) -> Unit) {
+        require(requestCode in 1..0xFFFF) { "File picker request code must fit in 16 bits." }
+        filePickerCallbacks[requestCode] = onResult
+        try {
+            startActivityForResult(intent, requestCode)
+        } catch (e: Exception) {
+            filePickerCallbacks.remove(requestCode)
+            throw e
+        }
+    }
+
+    @Deprecated("Uses a 16-bit request code for FragmentActivity compatibility.")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        val callback = filePickerCallbacks.remove(requestCode) ?: return
+        callback(if (resultCode == RESULT_OK) data?.data else null)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installCrashDiagnostics(applicationContext)
         super.onCreate(savedInstanceState)
@@ -306,7 +324,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     var authError by remember { mutableStateOf("") }
     var authenticating by remember { mutableStateOf(false) }
     var backupMessage by remember { mutableStateOf("") }
-    val exportBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+    fun handleExportBackup(uri: android.net.Uri?) {
         if (uri != null) {
             try {
                 val backup = JSONObject()
@@ -325,7 +343,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             }
         }
     }
-    val importBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    fun handleImportBackup(uri: android.net.Uri?) {
         if (uri != null) {
             try {
                 val stream = context.contentResolver.openInputStream(uri)
@@ -407,7 +425,12 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
-                        onClick = { try { exportBackup.launch("Allerium-server-backup.json") } catch (e: Exception) { backupMessage = "Could not open Android save picker: " + (e.message ?: e.javaClass.simpleName) } },
+                        onClick = { try {
+                            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                                .setType("application/json").putExtra(Intent.EXTRA_TITLE, "Allerium-server-backup.json")
+                            (fragmentActivity(context) as? MainActivity)?.launchFilePicker(4101, intent, ::handleExportBackup)
+                                ?: throw IllegalStateException("Main activity is unavailable.")
+                        } catch (e: Exception) { backupMessage = "Could not open Android save picker: " + (e.message ?: e.javaClass.simpleName) } },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(14.dp),
                         border = BorderStroke(1.dp, Line)
@@ -417,7 +440,11 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                         Text("Create backup", fontSize = 11.sp)
                     }
                     OutlinedButton(
-                        onClick = { try { importBackup.launch(arrayOf("*/*")) } catch (e: Exception) { backupMessage = "Could not open Android file picker: " + (e.message ?: e.javaClass.simpleName) } },
+                        onClick = { try {
+                            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+                            (fragmentActivity(context) as? MainActivity)?.launchFilePicker(4102, intent, ::handleImportBackup)
+                                ?: throw IllegalStateException("Main activity is unavailable.")
+                        } catch (e: Exception) { backupMessage = "Could not open Android file picker: " + (e.message ?: e.javaClass.simpleName) } },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(14.dp),
                         border = BorderStroke(1.dp, Line)
