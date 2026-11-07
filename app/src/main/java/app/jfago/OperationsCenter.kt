@@ -193,7 +193,7 @@ fun OperationsCenterPage(
                             Text("Server-side backup retention", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                             Text("Set how many JFA-GO database backups the server keeps. JFA-GO performs cleanup according to this setting when it creates scheduled backups.", color = Dim, fontSize = 9.sp)
                             Field(backupRetention, { backupRetention = it.filter(Char::isDigit).take(3) }, "Keep backups (1–500)")
-                            OutlinedButton(enabled = !retentionLoading && backupRetention.toIntOrNull() in 1..500,
+                            OutlinedButton(enabled = !retentionLoading && (backupRetention.toIntOrNull()?.let { it in 1..500 } == true),
                                 onClick = {
                                     retentionLoading = true
                                     scope.launch {
