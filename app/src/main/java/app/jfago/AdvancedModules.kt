@@ -31,6 +31,7 @@ fun AdvancedModulesPage(
     invites: List<JSONObject>,
     profiles: List<String>,
     initialModule: String = "Users",
+    requireBiometricRestore: Boolean = false,
     onClose: () -> Unit,
     onRefresh: () -> Unit,
     onMessage: (String) -> Unit
@@ -303,9 +304,19 @@ fun AdvancedModulesPage(
                                 }
                             }) { Text("Refresh list", fontSize = 10.sp) }
                             OutlinedButton(enabled = !busy, onClick = {
-                                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
-                                hostActivity?.launchFilePicker(4202, intent, ::handleBackupUpload)
-                                    ?: run { feedback = "Main activity is unavailable." }
+                                fun openUploadPicker() {
+                                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+                                    hostActivity?.launchFilePicker(4202, intent, ::handleBackupUpload)
+                                        ?: run { feedback = "Main activity is unavailable." }
+                                }
+                                if (requireBiometricRestore) {
+                                    showBiometricPrompt(context, "Confirm backup restore",
+                                        "Verify before uploading and restoring a server database",
+                                        onSuccess = ::openUploadPicker,
+                                        onPasswordFallback = { feedback = "Restore cancelled. Biometric verification is required." },
+                                        onError = { feedback = "Restore cancelled: $it" },
+                                        negativeButtonText = "Cancel")
+                                } else openUploadPicker()
                             }) { Text("Upload & restore", fontSize = 10.sp) }
                         }
                         backups.forEach { backup ->
@@ -419,7 +430,17 @@ fun AdvancedModulesPage(
                 TextButton(enabled = !busy, onClick = {
                     val name = restoreTarget
                     restoreTarget = ""
-                    execute("Restore request submitted") { api.restoreServerBackup(name) }
+                    fun submitRestore() {
+                        execute("Restore request submitted") { api.restoreServerBackup(name) }
+                    }
+                    if (requireBiometricRestore) {
+                        showBiometricPrompt(context, "Confirm database restore",
+                            "Verify before restoring '$name' and restarting JFA-GO",
+                            onSuccess = ::submitRestore,
+                            onPasswordFallback = { feedback = "Restore cancelled. Biometric verification is required." },
+                            onError = { feedback = "Restore cancelled: $it" },
+                            negativeButtonText = "Cancel")
+                    } else submitRestore()
                 }) { Text("Restore and restart", color = Color(0xFFFFC36B)) }
             },
             dismissButton = { TextButton(onClick = { restoreTarget = "" }) { Text("Cancel") } }
