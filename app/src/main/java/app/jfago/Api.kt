@@ -12,6 +12,7 @@ import java.net.URLEncoder
 class Api(server: String) {
     val base = server.trim().trimEnd('/')
     var token = ""
+    var auditSink: ((String, String, Int, Boolean) -> Unit)? = null
 
     private fun call(method: String, path: String, body: JSONObject? = null, basic: String? = null): String {
         val c = URL(base + path).openConnection() as HttpURLConnection
@@ -26,6 +27,7 @@ class Api(server: String) {
         }
         val code = c.responseCode
         val text = (if (code < 400) c.inputStream else c.errorStream)?.bufferedReader()?.readText() ?: ""
+        auditSink?.invoke(method, path, code, code < 400)
         if (code >= 400) throw Exception("HTTP $code ${text.take(120)}")
         return text
     }
