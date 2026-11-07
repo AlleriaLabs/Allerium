@@ -1441,6 +1441,52 @@ private fun AboutAlleriumPage(onBack: () -> Unit) {
             "${info.versionName ?: "Unknown"} ($code)"
         } catch (_: Exception) { "Unavailable" }
     }
+    val scope = rememberCoroutineScope()
+    var checking by remember { mutableStateOf(false) }
+    var updateStatus by remember { mutableStateOf("Check GitHub for the latest published Allerium release.") }
+    var latestTag by remember { mutableStateOf("") }
+    var releaseUrl by remember { mutableStateOf("") }
+    var updateAvailable by remember { mutableStateOf(false) }
+    fun checkForUpdate() {
+        if (checking) return
+        checking = true
+        scope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    val connection = (URL("https://api.github.com/repos/AlleriaLabs/Allerium/releases/latest").openConnection() as HttpURLConnection)
+                    connection.connectTimeout = 10000
+                    connection.readTimeout = 15000
+                    connection.setRequestProperty("Accept", "application/vnd.github+json")
+                    connection.setRequestProperty("User-Agent", "Allerium-Android")
+                    try {
+                        val code = connection.responseCode
+                        if (code == 404) throw IllegalStateException("No public Allerium release has been published yet.")
+                        if (code >= 400) throw IllegalStateException("GitHub returned HTTP $code.")
+                        val json = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                        json.optString("tag_name") to json.optString("html_url")
+                    } finally { connection.disconnect() }
+                }
+                latestTag = result.first
+                releaseUrl = result.second
+                val current = appInfo.substringBefore(" ").trim()
+                fun parts(value: String) = Regex("\\d+").findAll(value).map { it.value.toIntOrNull() ?: 0 }.toList()
+                val latestParts = parts(latestTag)
+                val currentParts = parts(current)
+                val count = maxOf(latestParts.size, currentParts.size)
+                var comparison = 0
+                for (i in 0 until count) {
+                    val x = latestParts.getOrElse(i) { 0 }
+                    val y = currentParts.getOrElse(i) { 0 }
+                    if (x != y) { comparison = x.compareTo(y); break }
+                }
+                updateAvailable = comparison > 0
+                updateStatus = if (updateAvailable) "A newer release is available. Open GitHub to review its release notes and APK assets."
+                    else "You're using the latest published release, or a build newer than that release."
+            } catch (e: Exception) {
+                updateStatus = e.message ?: "Could not check for updates."
+            } finally { checking = false }
+        }
+    }
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1464,6 +1510,17 @@ private fun AboutAlleriumPage(onBack: () -> Unit) {
             Spacer(Modifier.height(8.dp))
             Text("A secure mobile companion for managing your JFA-GO server.", color = Dim,
                 fontSize = 12.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+        }
+        JCard {
+            Text("Software updates", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(if (latestTag.isBlank()) updateStatus else "Latest published release: $latestTag", color = if (updateAvailable) Cyan else Dim, fontSize = 10.sp)
+            if (latestTag.isNotBlank()) Text(updateStatus, color = Dim, fontSize = 10.sp)
+            RedBtn(if (checking) "Checking GitHub…" else "Check for updates", enabled = !checking,
+                icon = Icons.Default.SystemUpdate, on = ::checkForUpdate)
+            if (releaseUrl.isNotBlank()) OutlinedButton(onClick = {
+                context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(releaseUrl)))
+            }, modifier = Modifier.fillMaxWidth()) { Text("Open release on GitHub") }
+            Text("The checker reports published releases only. It does not silently install APKs; review and install releases yourself.", color = Dim, fontSize = 9.sp)
         }
         JCard {
             Text("App information", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
