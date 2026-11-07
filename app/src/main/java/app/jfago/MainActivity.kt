@@ -179,7 +179,12 @@ internal fun showBiometricPrompt(
     val prompt = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity),
         object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                onSuccess()
+                try {
+                    onSuccess()
+                } catch (e: Exception) {
+                    onError("Verification succeeded, but the action could not be completed: " +
+                        (e.message ?: e.javaClass.simpleName))
+                }
             }
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                 if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON) onPasswordFallback()
