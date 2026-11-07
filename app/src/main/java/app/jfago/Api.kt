@@ -223,7 +223,7 @@ class Api(server: String) {
         c.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
         c.outputStream.use { out ->
             out.write("--$boundary\r\n".toByteArray())
-            out.write("Content-Disposition: form-data; name=\\"backups-file\\"; filename=\\"$filename\\"\r\n".toByteArray())
+            out.write(("Content-Disposition: form-data; name=" + "\"backups-file\"" + "; filename=" + "\"$filename\"" + "\r\n").toByteArray())
             out.write("Content-Type: application/octet-stream\r\n\r\n".toByteArray())
             input.copyTo(out)
             out.write("\r\n--$boundary--\r\n".toByteArray())
