@@ -37,10 +37,10 @@ Never add these values to source files, workflow YAML, commits, issues, or chat 
 
 ## 4. Publish releases
 
-After all four secrets are configured, publish a version tag (for example `v1.0.0`) or run **Actions → Build and publish Allerium release → Run workflow**. The workflow builds a signed release APK and attaches it to the GitHub release.
+After all four secrets are configured, publish the next version tag from the updated `main` branch (currently `v1.0.1`) or run **Actions → Build and publish Allerium release → Run workflow** with that tag. The original `v1.0.0` release was already built before persistent signing was configured; use `v1.0.1` for the first permanently signed release. The workflow builds a signed release APK and attaches it to the GitHub release.
 
 Keep the same keystore for every future version. Increase `versionCode` for every release; Android uses it to determine whether an APK is a valid upgrade.
 
 ## Important: existing debug installations
 
-The earlier CI workflow produced debug APKs using a runner-generated debug key. That temporary key is not the permanent release key. Android only permits an in-place update when the signing certificates match. Therefore, an installation made from one of those earlier CI debug APKs may need a one-time uninstall before installing the first permanently signed release APK. Back up server settings first if needed. After moving to the permanent release-signed APK, subsequent releases using this same key can install over it without uninstalling.
+The already-published `v1.0.0` APK and earlier CI debug APKs were built using a runner-generated debug key. That temporary key is not the permanent release key. Android only permits an in-place update when the signing certificates match. Therefore, an installation made from `v1.0.0` or one of those earlier CI debug APKs will need a one-time uninstall before installing the first permanently signed release APK (`v1.0.1`). Back up server settings first if needed. Back up server settings first if needed. After moving to the permanent release-signed APK, subsequent releases using this same key can install over it without uninstalling.
