@@ -922,7 +922,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                         }
                         IconButton(onClick = { workspacePage = "operations" }) { Icon(Icons.Default.ChevronRight, null, tint = Cyan) }
                     }
-                    TextButton(onClick = { featureDialog = "operations" }) { Text("Open Control Center", color = Cyan) }
+                    TextButton(onClick = { workspacePage = "operations" }) { Text("Open Control Center", color = Cyan) }
                 }
                 JCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1201,8 +1201,6 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             text = { Text("Add user", fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
         )
     }
-    }
-
     }
     if (workspacePage.isNotEmpty()) {
         when (workspacePage) {
