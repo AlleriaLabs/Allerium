@@ -1744,3 +1744,111 @@ private fun UserDetailsPage(
         }
     }
 }
+
+
+@Composable
+private fun AppLockGate(onUnlocked: () -> Unit) {
+    val context = LocalContext.current
+    var message by remember { mutableStateOf("Verify your identity to open Allerium.") }
+    var prompting by remember { mutableStateOf(false) }
+    fun authenticate() {
+        val activity = fragmentActivity(context)
+        if (activity == null) { message = "Authentication is unavailable. Reopen the app and try again."; return }
+        try {
+            prompting = true
+            val prompt = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity),
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                        prompting = false
+                        onUnlocked()
+                    }
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        prompting = false
+                        message = errString.toString()
+                    }
+                    override fun onAuthenticationFailed() {
+                        message = "That verification was not accepted. Try again."
+                    }
+                })
+            val authenticators = if (Build.VERSION.SDK_INT >= 30)
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            else BiometricManager.Authenticators.BIOMETRIC_STRONG
+            val builder = BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Unlock Allerium")
+                .setSubtitle("Use your fingerprint, face, or device screen lock")
+                .setAllowedAuthenticators(authenticators)
+            if (Build.VERSION.SDK_INT < 30) builder.setNegativeButtonText("Cancel")
+            prompt.authenticate(builder.build())
+        } catch (e: Exception) {
+            prompting = false
+            message = e.message ?: "Could not start device authentication."
+        }
+    }
+    LaunchedEffect(Unit) { authenticate() }
+    Box(Modifier.fillMaxSize().background(Bg), contentAlignment = Alignment.Center) {
+        JCard(Modifier.padding(24.dp)) {
+            androidx.compose.foundation.Image(
+                painter = androidx.compose.ui.res.painterResource(R.drawable.allerium_mark),
+                contentDescription = "Allerium logo",
+                modifier = Modifier.size(76.dp).align(Alignment.CenterHorizontally))
+            Text("ALLERIUM", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                letterSpacing = 3.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
+            Text("APP LOCKED", color = Cyan, fontSize = 10.sp, letterSpacing = 2.sp,
+                modifier = Modifier.align(Alignment.CenterHorizontally))
+            Spacer(Modifier.height(12.dp))
+            Text(message, color = Dim, fontSize = 11.sp)
+            RedBtn(if (prompting) "Waiting for verification…" else "Unlock Allerium",
+                enabled = !prompting, icon = Icons.Default.LockOpen, on = ::authenticate)
+        }
+    }
+}
+
+@Composable
+private fun AppSecurityPage(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember(context) { context.getSharedPreferences("allerium_app_security", Context.MODE_PRIVATE) }
+    var enabled by remember { mutableStateOf(prefs.getBoolean("lock_enabled", false)) }
+    var timeout by remember { mutableIntStateOf(prefs.getInt("lock_timeout_minutes", 0)) }
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
+            Column {
+                Text("App Security", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                Text("Protect Allerium when it returns to the foreground", color = Dim, fontSize = 10.sp)
+            }
+        }
+        JCard {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Automatic app lock", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text("Require device authentication after Allerium stays in the background.", color = Dim, fontSize = 10.sp)
+                }
+                Switch(checked = enabled, onCheckedChange = {
+                    enabled = it
+                    prefs.edit().putBoolean("lock_enabled", it).apply()
+                    if (!it) prefs.edit().remove("background_at").apply()
+                })
+            }
+        }
+        JCard {
+            Text("Lock after", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            listOf(0 to "Immediately", 1 to "1 minute", 5 to "5 minutes", 15 to "15 minutes").forEach { (minutes, label) ->
+                Row(Modifier.fillMaxWidth().clickable(enabled = enabled) {
+                    timeout = minutes
+                    prefs.edit().putInt("lock_timeout_minutes", minutes).apply()
+                }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(label, color = if (enabled) Color.White else Dim, modifier = Modifier.weight(1f), fontSize = 12.sp)
+                    RadioButton(selected = timeout == minutes, onClick = {
+                        timeout = minutes
+                        prefs.edit().putInt("lock_timeout_minutes", minutes).apply()
+                    }, enabled = enabled)
+                }
+            }
+        }
+        JCard {
+            Text("Authentication method", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text("Allerium uses Android's secure system prompt. On Android 11 and newer, you can unlock with a strong biometric or your device PIN, pattern, or password. Older Android versions use supported strong biometrics.", color = Dim, fontSize = 10.sp)
+        }
+        Text("This lock protects access to the app UI on this device. It does not replace your Android screen lock, server credentials, or JFA-GO permissions.", color = Dim, fontSize = 10.sp)
+    }
+}
