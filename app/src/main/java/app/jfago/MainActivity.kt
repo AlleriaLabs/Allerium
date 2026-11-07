@@ -1451,10 +1451,9 @@ private fun AboutAlleriumPage(onBack: () -> Unit) {
     val context = LocalContext.current
     val appInfo = remember(context) {
         try {
-            val info = if (Build.VERSION.SDK_INT >= 33) {
-                context.packageManager.getPackageInfo(context.packageName,
-                    android.content.pm.PackageManager.PackageInfoFlags.of(0))
-            } else {
+            val info = if (Build.VERSION.SDK_INT >= 33) context.packageManager.getPackageInfo(
+                context.packageName, android.content.pm.PackageManager.PackageInfoFlags.of(0))
+            else {
                 @Suppress("DEPRECATION")
                 context.packageManager.getPackageInfo(context.packageName, 0)
             }
@@ -1467,50 +1466,164 @@ private fun AboutAlleriumPage(onBack: () -> Unit) {
     }
     val scope = rememberCoroutineScope()
     var checking by remember { mutableStateOf(false) }
+    var downloading by remember { mutableStateOf(false) }
     var updateStatus by remember { mutableStateOf("Check GitHub for the latest published Allerium release.") }
     var latestTag by remember { mutableStateOf("") }
     var releaseUrl by remember { mutableStateOf("") }
+    var releaseNotes by remember { mutableStateOf("") }
+    var apkUrl by remember { mutableStateOf("") }
+    var expectedDigest by remember { mutableStateOf("") }
     var updateAvailable by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableIntStateOf(0) }
+    var downloadedApk by remember { mutableStateOf<java.io.File?>(null) }
+
+    fun compareVersions(first: String, second: String): Int {
+        fun parts(value: String) = Regex("\\d+").findAll(value)
+            .map { it.value.toIntOrNull() ?: 0 }.toList()
+        val a = parts(first); val b = parts(second)
+        for (i in 0 until maxOf(a.size, b.size)) {
+            val c = a.getOrElse(i) { 0 }.compareTo(b.getOrElse(i) { 0 })
+            if (c != 0) return c
+        }
+        return 0
+    }
+
     fun checkForUpdate() {
-        if (checking) return
+        if (checking || downloading) return
         checking = true
+        downloadedApk = null
         scope.launch {
             try {
-                val result = withContext(Dispatchers.IO) {
-                    val connection = (URL("https://api.github.com/repos/AlleriaLabs/Allerium/releases/latest").openConnection() as HttpURLConnection)
+                val release = withContext(Dispatchers.IO) {
+                    val connection = URL("https://api.github.com/repos/AlleriaLabs/Allerium/releases/latest")
+                        .openConnection() as HttpURLConnection
                     connection.connectTimeout = 10000
                     connection.readTimeout = 15000
                     connection.setRequestProperty("Accept", "application/vnd.github+json")
                     connection.setRequestProperty("User-Agent", "Allerium-Android")
                     try {
                         val code = connection.responseCode
-                        if (code == 404) throw IllegalStateException("No public Allerium release has been published yet.")
+                        if (code == 404) throw IllegalStateException(
+                            "GitHub could not find a public release. The repository must be public for automatic updates.")
                         if (code >= 400) throw IllegalStateException("GitHub returned HTTP $code.")
-                        val json = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
-                        json.optString("tag_name") to json.optString("html_url")
+                        JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
                     } finally { connection.disconnect() }
                 }
-                latestTag = result.first
-                releaseUrl = result.second
+                latestTag = release.optString("tag_name")
+                releaseUrl = release.optString("html_url")
+                releaseNotes = release.optString("body").ifBlank { "No release notes were provided." }.take(3000)
                 val current = appInfo.substringBefore(" ").trim()
-                fun parts(value: String) = Regex("\\d+").findAll(value).map { it.value.toIntOrNull() ?: 0 }.toList()
-                val latestParts = parts(latestTag)
-                val currentParts = parts(current)
-                val count = maxOf(latestParts.size, currentParts.size)
-                var comparison = 0
-                for (i in 0 until count) {
-                    val x = latestParts.getOrElse(i) { 0 }
-                    val y = currentParts.getOrElse(i) { 0 }
-                    if (x != y) { comparison = x.compareTo(y); break }
+                updateAvailable = !release.optBoolean("draft") && !release.optBoolean("prerelease") &&
+                    compareVersions(latestTag, current) > 0
+                val apk = release.optJSONArray("assets")?.let { assets ->
+                    (0 until assets.length()).map { assets.optJSONObject(it) }
+                        .firstOrNull { it?.optString("name")?.endsWith(".apk", true) == true }
                 }
-                updateAvailable = comparison > 0
-                updateStatus = if (updateAvailable) "A newer release is available. Open GitHub to review its release notes and APK assets."
-                    else "You're using the latest published release, or a build newer than that release."
+                apkUrl = apk?.optString("browser_download_url").orEmpty()
+                expectedDigest = apk?.optString("digest").orEmpty().removePrefix("sha256:")
+                if (updateAvailable && apkUrl.isBlank()) {
+                    updateStatus = "Version $latestTag is available, but its release has no APK asset yet."
+                } else if (updateAvailable) {
+                    updateStatus = "Version $latestTag is ready. Download and install it without leaving Allerium."
+                } else {
+                    updateStatus = "You're using the latest published release, or a build newer than that release."
+                }
             } catch (e: Exception) {
                 updateStatus = e.message ?: "Could not check for updates."
             } finally { checking = false }
         }
     }
+
+    fun downloadUpdate() {
+        if (downloading || apkUrl.isBlank()) return
+        downloading = true
+        downloadProgress = 0
+        updateStatus = "Preparing the update download…"
+        scope.launch {
+            try {
+                val file = withContext(Dispatchers.IO) {
+                    val connection = (URL(apkUrl).openConnection() as HttpURLConnection)
+                    connection.connectTimeout = 15000
+                    connection.readTimeout = 30000
+                    connection.instanceFollowRedirects = true
+                    connection.setRequestProperty("User-Agent", "Allerium-Android")
+                    try {
+                        val code = connection.responseCode
+                        if (code >= 400) throw IllegalStateException("APK download failed (HTTP $code).")
+                        val total = connection.contentLengthLong
+                        val directory = java.io.File(context.cacheDir, "updates").apply { mkdirs() }
+                        val output = java.io.File(directory, "Allerium-$latestTag.apk")
+                        connection.inputStream.use { input ->
+                            java.io.FileOutputStream(output).use { stream ->
+                                val buffer = ByteArray(64 * 1024)
+                                var copied = 0L
+                                while (true) {
+                                    val count = input.read(buffer)
+                                    if (count < 0) break
+                                    stream.write(buffer, 0, count)
+                                    copied += count
+                                    if (total > 0L) {
+                                        val percent = ((copied * 100L) / total).toInt().coerceIn(0, 100)
+                                        scope.launch { downloadProgress = percent }
+                                    }
+                                }
+                                stream.fd.sync()
+                            }
+                        }
+                        if (output.length() == 0L) throw IllegalStateException("The downloaded APK is empty.")
+                        if (expectedDigest.isNotBlank()) {
+                            val digest = java.security.MessageDigest.getInstance("SHA-256")
+                            output.inputStream().use { input ->
+                                val buffer = ByteArray(64 * 1024)
+                                while (true) {
+                                    val count = input.read(buffer)
+                                    if (count < 0) break
+                                    digest.update(buffer, 0, count)
+                                }
+                            }
+                            val actual = digest.digest().joinToString("") { "%02x".format(it) }
+                            if (!actual.equals(expectedDigest, ignoreCase = true)) {
+                                output.delete()
+                                throw IllegalStateException("APK checksum verification failed. Please retry the download.")
+                            }
+                        }
+                        output
+                    } finally { connection.disconnect() }
+                }
+                downloadedApk = file
+                downloadProgress = 100
+                updateStatus = if (expectedDigest.isNotBlank())
+                    "Download complete. SHA-256 checksum verified. Ready to install."
+                else "Download complete. GitHub did not provide a checksum; ready to install."
+            } catch (e: Exception) {
+                updateStatus = e.message ?: "Could not download the update."
+            } finally { downloading = false }
+        }
+    }
+
+    fun installUpdate() {
+        val file = downloadedApk ?: return
+        if (!file.exists()) { updateStatus = "The downloaded APK is missing. Please download it again."; downloadedApk = null; return }
+        try {
+            if (Build.VERSION.SDK_INT >= 26 && !context.packageManager.canRequestPackageInstalls()) {
+                updateStatus = "Allow Allerium to install updates from this source, then return here and tap Install update."
+                context.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    android.net.Uri.parse("package:${context.packageName}")))
+                return
+            }
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context, "${context.packageName}.fileprovider", file)
+            val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                putExtra(Intent.EXTRA_RETURN_RESULT, true)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            updateStatus = e.message ?: "Android could not open the package installer."
+        }
+    }
+
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1537,14 +1650,28 @@ private fun AboutAlleriumPage(onBack: () -> Unit) {
         }
         JCard {
             Text("Software updates", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text(if (latestTag.isBlank()) updateStatus else "Latest published release: $latestTag", color = if (updateAvailable) Cyan else Dim, fontSize = 10.sp)
+            Text(if (latestTag.isBlank()) updateStatus else "Latest published release: $latestTag",
+                color = if (updateAvailable) Cyan else Dim, fontSize = 10.sp)
             if (latestTag.isNotBlank()) Text(updateStatus, color = Dim, fontSize = 10.sp)
-            RedBtn(if (checking) "Checking GitHub…" else "Check for updates", enabled = !checking,
+            if (downloading) {
+                LinearProgressIndicator(progress = { downloadProgress / 100f }, modifier = Modifier.fillMaxWidth())
+                Text("Downloading update… $downloadProgress%", color = Cyan, fontSize = 10.sp)
+            }
+            RedBtn(if (checking) "Checking GitHub…" else "Check for updates", enabled = !checking && !downloading,
                 icon = Icons.Default.SystemUpdate, on = ::checkForUpdate)
-            if (releaseUrl.isNotBlank()) OutlinedButton(onClick = {
-                context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(releaseUrl)))
-            }, modifier = Modifier.fillMaxWidth()) { Text("Open release on GitHub") }
-            Text("The checker reports published releases only. It does not silently install APKs; review and install releases yourself.", color = Dim, fontSize = 9.sp)
+            if (updateAvailable && apkUrl.isNotBlank() && downloadedApk == null) {
+                RedBtn(if (downloading) "Downloading…" else "Download update",
+                    enabled = !downloading, icon = Icons.Default.Download, on = ::downloadUpdate)
+            }
+            if (downloadedApk != null) {
+                RedBtn("Install update", icon = Icons.Default.InstallMobile, on = ::installUpdate)
+            }
+            if (releaseNotes.isNotBlank() && updateAvailable) {
+                Text("What's new", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(releaseNotes, color = Dim, fontSize = 10.sp)
+            }
+            Text("Updates download inside Allerium. Android will ask you to approve installation. If prompted, allow Allerium to install unknown apps in Android settings, then return and tap Install update.",
+                color = Dim, fontSize = 9.sp)
         }
         JCard {
             Text("App information", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -1562,394 +1689,5 @@ private fun AboutAlleriumPage(onBack: () -> Unit) {
         }
         Text("Part of the Alleria Labs product family.", color = Dim, fontSize = 10.sp,
             modifier = Modifier.align(Alignment.CenterHorizontally))
-    }
-}
-
-@Composable
-private fun NotificationCenterPage(
-    alerts: List<CenterAlert>, readIds: Set<String>, filter: String,
-    onFilter: (String) -> Unit, onRead: (String) -> Unit, onReadAll: (List<String>) -> Unit, onBack: () -> Unit
-) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
-            Column { Text("Notification Center", color = Color.White, fontSize = 21.sp); Text("Account alerts and recent activity", color = Dim, fontSize = 10.sp) }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("All", "Accounts", "Activity").forEach { value ->
-                FilterChip(selected = filter == value, onClick = { onFilter(value) }, label = { Text(value) })
-            }
-            Spacer(Modifier.weight(1f))
-            TextButton(onClick = { onReadAll(alerts.filter { filter == "All" || it.category == filter }.map { it.id }) }) { Text("Mark all read", color = Cyan) }
-        }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val shown = alerts.filter { filter == "All" || it.category == filter }
-            if (shown.isEmpty()) Text("You're all caught up.", color = Dim, modifier = Modifier.padding(20.dp))
-            shown.forEach { alert ->
-                JCard(Modifier.clickable { onRead(alert.id) }) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(if (alert.warning) Icons.Default.WarningAmber else Icons.Default.Notifications, null, tint = if (alert.warning) Color(0xFFFFC36B) else Cyan)
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(alert.title, color = Color.White, fontWeight = FontWeight.SemiBold)
-                            Text(alert.detail, color = Dim, fontSize = 10.sp)
-                            Text(DateFormat.getDateTimeInstance().format(Date(alert.timestamp)), color = Dim, fontSize = 9.sp)
-                        }
-                        if (alert.id !in readIds) Box(Modifier.size(8.dp).clip(CircleShape).background(Cyan))
-                    }
-                }
-            }
-        }
-    }
-}
-@Composable
-private fun DiagnosticsPage(checks: List<DiagnosticCheck>, busy: Boolean, onRun: () -> Unit, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
-            Column { Text("Server Diagnostics", color = Color.White, fontSize = 21.sp); Text("Authenticated API endpoint checks", color = Dim, fontSize = 10.sp) }
-        }
-        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Cyan)
-        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            checks.forEach { check ->
-                JCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(if (check.passed) Icons.Default.CheckCircle else Icons.Default.ErrorOutline, null, tint = if (check.passed) Green else Color(0xFFFF8585))
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) { Text(check.label, color = Color.White, fontWeight = FontWeight.SemiBold); Text(check.detail, color = Dim, fontSize = 10.sp) }
-                        Text("${check.durationMs} ms", color = Cyan, fontSize = 10.sp)
-                    }
-                }
-            }
-            if (checks.isEmpty() && !busy) Text("Run diagnostics to check authenticated JFA-GO endpoints.", color = Dim)
-        }
-        RedBtn(if (busy) "Checking…" else if (checks.isEmpty()) "Run diagnostics" else "Run again", enabled = !busy, icon = Icons.Default.Speed, on = onRun)
-    }
-}
-@Composable
-private fun ExportWorkspacePage(users: List<JSONObject>, acts: List<JSONObject>, context: Context, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
-            Column { Text("Export Workspace Data", color = Color.White, fontSize = 21.sp); Text("Download server data as CSV", color = Dim, fontSize = 10.sp) }
-        }
-        JCard {
-            Text("Users", color = Color.White, fontWeight = FontWeight.SemiBold)
-            Text("${users.size} accounts · usernames, email, roles and expiry", color = Dim, fontSize = 10.sp)
-            RedBtn("Export users · CSV", icon = Icons.Default.People) {
-                val csv = buildString {
-                    append("username,email,admin,disabled,expiry\n")
-                    users.forEach { u ->
-                        val values = listOf(u.optString("name"), u.optString("email"), u.optBoolean("admin").toString(), u.optBoolean("disabled").toString(), u.optLong("expiry").toString())
-                        append(values.joinToString(",") { "\"" + it.replace("\"", "\"\"") + "\"" }); append('\n')
-                    }
-                }
-                shareCsv(context, "Allerium users.csv", csv)
-            }
-        }
-        JCard {
-            Text("Activity", color = Color.White, fontWeight = FontWeight.SemiBold)
-            Text("${acts.size} activity records", color = Dim, fontSize = 10.sp)
-            RedBtn("Export activity · CSV", icon = Icons.Default.History) {
-                val csv = buildString {
-                    append("time,type,username,details\n")
-                    acts.forEach { item ->
-                        val values = listOf(item.optLong("time").toString(), item.optString("type"), item.optString("username"), item.optString("message").ifBlank { item.optString("description") })
-                        append(values.joinToString(",") { "\"" + it.replace("\"", "\"\"") + "\"" }); append('\n')
-                    }
-                }
-                shareCsv(context, "Allerium activity.csv", csv)
-            }
-        }
-    }
-}
-
-
-@Composable
-private fun GlobalSearchPage(
-    users: List<JSONObject>, invites: List<JSONObject>, activities: List<JSONObject>,
-    query: String, onQueryChange: (String) -> Unit,
-    onOpenUsers: (String) -> Unit, onOpenInvites: (String) -> Unit,
-    onOpenActivity: (String) -> Unit, onBack: () -> Unit
-) {
-    val term = query.trim()
-    val userMatches = if (term.isBlank()) emptyList() else users.filter {
-        listOf(it.optString("name"), it.optString("email"), it.optString("id")).any { v -> v.contains(term, true) }
-    }.take(12)
-    val inviteMatches = if (term.isBlank()) emptyList() else invites.filter {
-        listOf(it.optString("code"), it.optString("label"), it.optString("user_label")).any { v -> v.contains(term, true) }
-    }.take(12)
-    val activityMatches = if (term.isBlank()) emptyList() else activities.filter {
-        listOf(it.optString("type"), it.optString("username"), it.optString("value"),
-            it.optString("message"), it.optString("description")).any { v -> v.contains(term, true) }
-    }.take(12)
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
-            Column {
-                Text("Global Search", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                Text("Search users, invitations and activity", color = Dim, fontSize = 10.sp)
-            }
-        }
-        Field(query, onQueryChange, "Search this server")
-        if (term.isBlank()) Text("Search by name, email, invite code, event type or activity detail.", color = Dim, fontSize = 11.sp)
-        else {
-            Text("${userMatches.size + inviteMatches.size + activityMatches.size} matching results", color = Cyan, fontSize = 10.sp)
-            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (userMatches.isNotEmpty()) {
-                    Text("USERS", color = Dim, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    userMatches.forEach { item ->
-                        JCard(Modifier.clickable { onOpenUsers(item.optString("name")) }) {
-                            Text(item.optString("name"), color = Color.White, fontWeight = FontWeight.SemiBold)
-                            Text(item.optString("email").ifBlank { "JFA-GO account" }, color = Dim, fontSize = 10.sp)
-                        }
-                    }
-                }
-                if (inviteMatches.isNotEmpty()) {
-                    Text("INVITATIONS", color = Dim, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    inviteMatches.forEach { item ->
-                        JCard(Modifier.clickable { onOpenInvites(item.optString("code")) }) {
-                            Text(item.optString("code"), color = Color.White, fontWeight = FontWeight.SemiBold)
-                            Text(item.optString("label").ifBlank { "Invitation" }, color = Dim, fontSize = 10.sp)
-                        }
-                    }
-                }
-                if (activityMatches.isNotEmpty()) {
-                    Text("ACTIVITY", color = Dim, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    activityMatches.forEach { item ->
-                        JCard(Modifier.clickable { onOpenActivity(term) }) {
-                            Text(item.optString("type").replace('_', ' ').ifBlank { "Activity" }, color = Color.White, fontWeight = FontWeight.SemiBold)
-                            Text(item.optString("message").ifBlank { item.optString("description") }, color = Dim, fontSize = 10.sp, maxLines = 2)
-                        }
-                    }
-                }
-                if (userMatches.isEmpty() && inviteMatches.isEmpty() && activityMatches.isEmpty()) {
-                    Text("No results found.", color = Dim, modifier = Modifier.padding(16.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DashboardSettingsPage(
-    analytics: Boolean, notifications: Boolean, diagnostics: Boolean, exports: Boolean,
-    onAnalytics: (Boolean) -> Unit, onNotifications: (Boolean) -> Unit,
-    onDiagnostics: (Boolean) -> Unit, onExports: (Boolean) -> Unit, onBack: () -> Unit
-) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
-            Column {
-                Text("Dashboard Settings", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                Text("Customize the Control Center", color = Dim, fontSize = 10.sp)
-            }
-        }
-        Text("Visible cards", color = Cyan, fontSize = 12.sp)
-        listOf(
-            Triple("Analytics & audit", analytics, onAnalytics),
-            Triple("Notifications", notifications, onNotifications),
-            Triple("Server diagnostics", diagnostics, onDiagnostics),
-            Triple("Workspace exports", exports, onExports)
-        ).forEach { (label, checked, change) ->
-            JCard {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(label, color = Color.White, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                    Switch(checked = checked, onCheckedChange = change)
-                }
-            }
-        }
-        Text("Preferences are saved locally for this server. Hiding a card does not disable its feature.", color = Dim, fontSize = 10.sp)
-    }
-}
-
-
-@Composable
-private fun UserDetailsPage(
-    user: JSONObject, onToggle: (Boolean) -> Unit, onReset: () -> Unit, onBack: () -> Unit
-) {
-    val name = user.optString("name").ifBlank { "User account" }
-    val expiry = user.optLong("expiry")
-    val expiryText = if (expiry <= 0L) "No expiry set" else DateFormat.getDateTimeInstance().format(
-        Date(if (expiry > 1_000_000_000_000L) expiry else expiry * 1000L))
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
-            Column {
-                Text("User Details", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                Text(name, color = Dim, fontSize = 10.sp)
-            }
-        }
-        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            JCard {
-                Text(name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(user.optString("email").ifBlank { "No email address" }, color = Dim, fontSize = 11.sp)
-                Spacer(Modifier.height(8.dp))
-                Pill(if (user.optBoolean("admin")) "ADMIN" else if (user.optBoolean("disabled")) "DISABLED" else "ACTIVE",
-                    if (user.optBoolean("disabled")) Color(0xFFFF8A8A) else Green)
-            }
-            JCard {
-                Text("Account information", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                listOf(
-                    "User ID" to user.optString("id"),
-                    "Email" to user.optString("email"),
-                    "Role" to if (user.optBoolean("admin")) "Administrator" else "Standard user",
-                    "Status" to if (user.optBoolean("disabled")) "Disabled" else "Enabled",
-                    "Expiry" to expiryText,
-                    "Labels" to user.opt("labels").toString().takeIf { it != "null" }.orEmpty()
-                ).forEach { (label, value) ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(label, color = Dim, fontSize = 10.sp)
-                        Text(value.ifBlank { "—" }, color = Color.White, fontSize = 10.sp)
-                    }
-                    HorizontalDivider(color = Line)
-                }
-            }
-            JCard {
-                Text("Additional server fields", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                user.keys().asSequence().sorted().forEach { key ->
-                    val value = user.opt(key)?.toString().orEmpty()
-                    if (value.isNotBlank() && value != "null" && key !in setOf("password", "token", "access_token")) {
-                        Text("${key.replace('_', ' ')}: ${value.take(240)}", color = Dim, fontSize = 9.sp)
-                    }
-                }
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(modifier = Modifier.weight(1f), onClick = onReset) { Text("Reset password") }
-            Button(modifier = Modifier.weight(1f), onClick = { onToggle(user.optBoolean("disabled")) }) {
-                Text(if (user.optBoolean("disabled")) "Enable account" else "Disable account")
-            }
-        }
-    }
-}
-
-
-@Composable
-private fun AppLockGate(onUnlocked: () -> Unit) {
-    val context = LocalContext.current
-    var message by remember { mutableStateOf("Verify your identity to open Allerium.") }
-    var prompting by remember { mutableStateOf(false) }
-    fun authenticate() {
-        val activity = fragmentActivity(context)
-        if (activity == null) { message = "Authentication is unavailable. Reopen the app and try again."; return }
-        try {
-            prompting = true
-            val prompt = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity),
-                object : BiometricPrompt.AuthenticationCallback() {
-                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                        prompting = false
-                        onUnlocked()
-                    }
-                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                        prompting = false
-                        message = errString.toString()
-                    }
-                    override fun onAuthenticationFailed() {
-                        message = "That verification was not accepted. Try again."
-                    }
-                })
-            val authenticators = if (Build.VERSION.SDK_INT >= 30)
-                BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
-            else BiometricManager.Authenticators.BIOMETRIC_STRONG
-            val builder = BiometricPrompt.PromptInfo.Builder()
-                .setTitle("Unlock Allerium")
-                .setSubtitle("Use your fingerprint, face, or device screen lock")
-                .setAllowedAuthenticators(authenticators)
-            if (Build.VERSION.SDK_INT < 30) builder.setNegativeButtonText("Cancel")
-            prompt.authenticate(builder.build())
-        } catch (e: Exception) {
-            prompting = false
-            message = e.message ?: "Could not start device authentication."
-        }
-    }
-    LaunchedEffect(Unit) { authenticate() }
-    Box(Modifier.fillMaxSize().background(Bg), contentAlignment = Alignment.Center) {
-        JCard(Modifier.padding(24.dp)) {
-            androidx.compose.foundation.Image(
-                painter = androidx.compose.ui.res.painterResource(R.drawable.allerium_mark),
-                contentDescription = "Allerium logo",
-                modifier = Modifier.size(76.dp).align(Alignment.CenterHorizontally))
-            Text("ALLERIUM", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold,
-                letterSpacing = 3.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
-            Text("APP LOCKED", color = Cyan, fontSize = 10.sp, letterSpacing = 2.sp,
-                modifier = Modifier.align(Alignment.CenterHorizontally))
-            Spacer(Modifier.height(12.dp))
-            Text(message, color = Dim, fontSize = 11.sp)
-            RedBtn(if (prompting) "Waiting for verification…" else "Unlock Allerium",
-                enabled = !prompting, icon = Icons.Default.LockOpen, on = ::authenticate)
-        }
-    }
-}
-
-@Composable
-private fun AppSecurityPage(onBack: () -> Unit) {
-    val context = LocalContext.current
-    val prefs = remember(context) { context.getSharedPreferences("allerium_app_security", Context.MODE_PRIVATE) }
-    var enabled by remember { mutableStateOf(prefs.getBoolean("lock_enabled", false)) }
-    var timeout by remember { mutableIntStateOf(prefs.getInt("lock_timeout_minutes", 0)) }
-    var securityNotice by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
-            Column {
-                Text("App Security", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                Text("Protect Allerium when it returns to the foreground", color = Dim, fontSize = 10.sp)
-            }
-        }
-        JCard {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Automatic app lock", color = Color.White, fontWeight = FontWeight.SemiBold)
-                    Text("Require device authentication after Allerium stays in the background.", color = Dim, fontSize = 10.sp)
-                }
-                Switch(checked = enabled, onCheckedChange = { requested ->
-                    if (!requested) {
-                        enabled = false
-                        prefs.edit().putBoolean("lock_enabled", false).remove("background_at").apply()
-                        securityNotice = "Automatic app lock disabled."
-                    } else {
-                        val authenticators = if (Build.VERSION.SDK_INT >= 30)
-                            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
-                        else BiometricManager.Authenticators.BIOMETRIC_STRONG
-                        val capability = BiometricManager.from(context).canAuthenticate(authenticators)
-                        if (capability == BiometricManager.BIOMETRIC_SUCCESS) {
-                            enabled = true
-                            prefs.edit().putBoolean("lock_enabled", true).apply()
-                            securityNotice = "Automatic app lock enabled."
-                        } else {
-                            securityNotice = when (capability) {
-                                BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> "Set up a device PIN, pattern, password, or supported biometric before enabling app lock."
-                                BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> "This device has no supported strong biometric. Set a device credential and try again."
-                                else -> "Android device authentication is unavailable. Configure a screen lock and try again."
-                            }
-                        }
-                    }
-                })
-            }
-        }
-        if (securityNotice.isNotBlank()) Text(securityNotice, color = Cyan, fontSize = 10.sp)
-        JCard {
-            Text("Lock after", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            listOf(0 to "Immediately", 1 to "1 minute", 5 to "5 minutes", 15 to "15 minutes").forEach { (minutes, label) ->
-                Row(Modifier.fillMaxWidth().clickable(enabled = enabled) {
-                    timeout = minutes
-                    prefs.edit().putInt("lock_timeout_minutes", minutes).apply()
-                }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(label, color = if (enabled) Color.White else Dim, modifier = Modifier.weight(1f), fontSize = 12.sp)
-                    RadioButton(selected = timeout == minutes, onClick = {
-                        timeout = minutes
-                        prefs.edit().putInt("lock_timeout_minutes", minutes).apply()
-                    }, enabled = enabled)
-                }
-            }
-        }
-        JCard {
-            Text("Authentication method", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Text("Allerium uses Android's secure system prompt. On Android 11 and newer, you can unlock with a strong biometric or your device PIN, pattern, or password. Older Android versions use supported strong biometrics.", color = Dim, fontSize = 10.sp)
-        }
-        Text("This lock protects access to the app UI on this device. It does not replace your Android screen lock, server credentials, or JFA-GO permissions.", color = Dim, fontSize = 10.sp)
     }
 }
