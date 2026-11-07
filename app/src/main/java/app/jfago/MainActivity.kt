@@ -135,7 +135,7 @@ private fun installCrashDiagnostics(context: Context) {
     }
 }
 
-private fun fragmentActivity(context: Context): FragmentActivity? {
+internal fun fragmentActivity(context: Context): FragmentActivity? {
     var current = context
     while (current is ContextWrapper) {
         if (current is FragmentActivity) return current
