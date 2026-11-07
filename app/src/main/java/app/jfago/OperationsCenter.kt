@@ -52,6 +52,11 @@ fun OperationsCenterPage(
     var feedback by remember { mutableStateOf("") }
     var audit by remember { mutableStateOf(emptyList<AuditEntry>()) }
     var schedule by remember { mutableStateOf(backupPrefs.getString("schedule_${server.url}", "Off") ?: "Off") }
+    var backupHistory by remember { mutableStateOf(emptyList<JSONObject>()) }
+    fun loadBackupHistory() {
+        val arr = JSONArray(backupPrefs.getString("history_${server.url}", "[]") ?: "[]")
+        backupHistory = (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }.reversed()
+    }
     var biometricEnabled by remember { mutableStateOf(context.getSharedPreferences("allerium_biometric", Context.MODE_PRIVATE).getBoolean(server.url, false)) }
     val workName = "allerium_backup_${server.url.hashCode()}"
 
@@ -64,7 +69,7 @@ fun OperationsCenterPage(
         }.sortedByDescending { it.time }
     }
 
-    LaunchedEffect(server.url) { loadAudit() }
+    LaunchedEffect(server.url) { loadAudit(); loadBackupHistory() }
 
     val now = System.currentTimeMillis()
     val active = users.count { !it.optBoolean("disabled") }
@@ -212,6 +217,22 @@ fun OperationsCenterPage(
                         val result = backupPrefs.getString("last_result_${server.url}", "No backup has run yet")
                         Text("Last successful backup: ${if (last > 0) DateFormat.getDateTimeInstance().format(Date(last)) else "Not recorded"}", color = Dim, fontSize = 9.sp)
                         Text("Latest result: ${result}", color = Dim, fontSize = 9.sp)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Text("Backup history · ${backupHistory.size}/20", color = Cyan, fontSize = 10.sp)
+                            TextButton(onClick = ::loadBackupHistory) { Text("Refresh history", color = Cyan, fontSize = 9.sp) }
+                        }
+                        if (backupHistory.isEmpty()) {
+                            Text("No scheduled backup runs recorded yet.", color = Dim, fontSize = 9.sp)
+                        } else backupHistory.take(10).forEach { entry ->
+                            Row(Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(entry.optString("result"), color = if (entry.optString("result") == "Success") Green else Color(0xFFFF8585), fontSize = 9.sp)
+                                    Text(DateFormat.getDateTimeInstance().format(Date(entry.optLong("time"))), color = Dim, fontSize = 8.sp)
+                                }
+                            }
+                        }
                         OutlinedButton(enabled = !busy, onClick = {
                             val request = OneTimeWorkRequestBuilder<ScheduledBackupWorker>()
                                 .setInputData(workDataOf("url" to server.url, "user" to server.user)).build()
