@@ -70,6 +70,24 @@ val PillC = Color(0xFF1C2740)
 
 class MainActivity : FragmentActivity() {
     private val filePickerCallbacks = mutableMapOf<Int, (android.net.Uri?) -> Unit>()
+    var lockRequired by mutableStateOf(false)
+        private set
+    private val appSecurityPrefs by lazy { getSharedPreferences("allerium_app_security", Context.MODE_PRIVATE) }
+    override fun onStart() {
+        super.onStart()
+        val enabled = appSecurityPrefs.getBoolean("lock_enabled", false)
+        val timeoutMinutes = appSecurityPrefs.getInt("lock_timeout_minutes", 0)
+        val backgroundAt = appSecurityPrefs.getLong("background_at", 0L)
+        if (enabled && backgroundAt > 0L && System.currentTimeMillis() - backgroundAt >= timeoutMinutes * 60_000L) lockRequired = true
+    }
+    override fun onStop() {
+        appSecurityPrefs.edit().putLong("background_at", System.currentTimeMillis()).apply()
+        super.onStop()
+    }
+    fun completeAppUnlock() {
+        lockRequired = false
+        appSecurityPrefs.edit().remove("background_at").apply()
+    }
 
     fun launchFilePicker(requestCode: Int, intent: Intent, onResult: (android.net.Uri?) -> Unit) {
         require(requestCode in 1..0xFFFF) { "File picker request code must fit in 16 bits." }
@@ -95,11 +113,13 @@ class MainActivity : FragmentActivity() {
         window.statusBarColor = Bg.toArgb(); window.navigationBarColor = Bg.toArgb()
         val cs = darkColorScheme(primary = Red, background = Bg, surface = Bg, onSurface = Color.White,
             surfaceVariant = CardC, onPrimary = Color.White, secondaryContainer = PillC)
-        setContent { MaterialTheme(colorScheme = cs) { Surface(Modifier.fillMaxSize(), color = Bg) { Root() } } }
+        setContent { MaterialTheme(colorScheme = cs) { Surface(Modifier.fillMaxSize(), color = Bg) {
+            Root(lockRequired = lockRequired, onUnlocked = ::completeAppUnlock)
+        } } }
     }
 }
 
-data class Srv(val name: String, val url: String, val user: String)
+data class Srv(val name: String, val url: String, val user: String, val group: String = "")
 private data class CenterAlert(
     val id: String,
     val title: String,
@@ -315,14 +335,18 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     }
 }
 
-@Composable fun Root() {
+@Composable fun Root(lockRequired: Boolean = false, onUnlocked: () -> Unit = {}) {
     val ctx = LocalContext.current
+    if (lockRequired) {
+        AppLockGate(onUnlocked)
+        return
+    }
     val prefs = remember { ctx.getSharedPreferences("jfa", Context.MODE_PRIVATE) }
     fun load(): List<Srv> { val a = JSONArray(prefs.getString("servers", "[]")); return (0 until a.length()).map {
-        val o = a.getJSONObject(it); Srv(o.getString("name"), o.getString("url"), o.getString("user")) } }
+        val o = a.getJSONObject(it); Srv(o.getString("name"), o.getString("url"), o.getString("user"), o.optString("group")) } }
     var servers by remember { mutableStateOf(load()) }
     fun save(l: List<Srv>) { servers = l; prefs.edit().putString("servers", JSONArray(l.map {
-        JSONObject().put("name", it.name).put("url", it.url).put("user", it.user) }).toString()).apply() }
+        JSONObject().put("name", it.name).put("url", it.url).put("user", it.user).put("group", it.group) }).toString()).apply() }
     var session by remember { mutableStateOf<Pair<Srv, Api>?>(null) }
     session?.let { (s, api) -> Home(s, api, servers, ::save) { session = null }; return }
     ServerList(servers, ::save) { s, a -> session = s to a }
@@ -352,7 +376,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                     .put("version", 1)
                     .put("createdAt", System.currentTimeMillis())
                     .put("servers", JSONArray(servers.map { server ->
-                        JSONObject().put("name", server.name).put("url", server.url).put("user", server.user)
+                        JSONObject().put("name", server.name).put("url", server.url).put("user", server.user).put("group", server.group)
                     }))
                 val stream = context.contentResolver.openOutputStream(uri)
                     ?: throw IllegalStateException("Could not open the selected backup destination.")
@@ -382,7 +406,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                     val user = item.optString("user").trim()
                     if (name.isBlank() || url.isBlank() || user.isBlank()) continue
                     if (merged.any { it.url.equals(url, ignoreCase = true) }) continue
-                    merged.add(Srv(name, url, user))
+                    merged.add(Srv(name, url, user, item.optString("group")))
                     added++
                 }
                 if (added > 0) save(merged)
@@ -521,6 +545,10 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                         val o = online[s.url]
                         Pill(if (o == null) "Checking connection" else if (o) "Server online" else "Unavailable",
                             if (o == true) Green else if (o == false) Color(0xFFFF8A8A) else Cyan)
+                        if (s.group.isNotBlank()) {
+                            Spacer(Modifier.height(5.dp))
+                            Pill(s.group, Cyan)
+                        }
                     }
                     IconButton(onClick = {
                         val next = favoriteUrls.toMutableSet()
@@ -565,6 +593,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         val old = editing
         var n by remember { mutableStateOf(old?.name ?: "") }; var u by remember { mutableStateOf(old?.url ?: "https://") }
         var us by remember { mutableStateOf(old?.user ?: "") }
+        var group by remember { mutableStateOf(old?.group ?: "") }
         var pw by remember { mutableStateOf(if (old == null) "" else credentials.getString(old.url, "").orEmpty()) }
         var biometricEnabled by remember(old?.url) { mutableStateOf(old?.let { biometricPrefs.getBoolean(it.url, false) } ?: false) }
         var biometricNotice by remember { mutableStateOf("") }
@@ -574,6 +603,8 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 Field(n, { n = it }, "Server name")
                 Field(u, { u = it.trim() }, "Server URL")
                 Field(us, { us = it }, "Username")
+                Field(group, { group = it }, "Server group (optional)")
+                Text("Use groups such as Home, Family, or Production to organize your servers.", color = Dim, fontSize = 9.sp)
                 Field(pw, { pw = it }, "Password", true)
                 Text("Password is stored encrypted on this device and used for automatic sign-in.", color = Dim, fontSize = 10.sp)
                 if ((old != null && credentials.getString(old.url, "").orEmpty().isNotBlank()) ||
@@ -606,7 +637,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 onClick = {
                     fun persistServer() {
                         val normalized = u.trim().trimEnd('/')
-                        val server = Srv(n.trim(), normalized, us.trim())
+                        val server = Srv(n.trim(), normalized, us.trim(), group.trim())
                         if (old != null && old.url != normalized) {
                             credentials.edit().remove(old.url).apply()
                             biometricPrefs.edit().remove(old.url).apply()
@@ -1007,11 +1038,14 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                     Triple("Backups", "Browse, download, upload and restore server backups.", Icons.Default.Backup),
                     Triple("Settings", "Inspect and manage supported JFA-GO configuration.", Icons.Default.Settings),
                     Triple("Integrations", "Manage available integration modules.", Icons.Default.Extension),
-                    Triple("About Allerium", "Branding, app information and version details.", Icons.Default.Info)
+                    Triple("About Allerium", "Branding, app information and version details.", Icons.Default.Info),
+                    Triple("App Security", "Automatic app lock and device authentication.", Icons.Default.Security)
                 ).forEach { item ->
                     JCard(Modifier.clickable {
                         if (item.first == "About Allerium") {
                             workspacePage = "about"
+                        } else if (item.first == "App Security") {
+                            workspacePage = "app-security"
                         } else {
                             initialToolModule = when (item.first) {
                                 "User management" -> "Users"
@@ -1285,6 +1319,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             }, onBack = { workspacePage = "" })
             "export" -> ExportWorkspacePage(users, acts, ctx, onBack = { workspacePage = "" })
             "about" -> AboutAlleriumPage(onBack = { workspacePage = "" })
+            "app-security" -> AppSecurityPage(onBack = { workspacePage = "" })
             "global-search" -> GlobalSearchPage(users, invites, acts, globalSearchQuery,
                 onQueryChange = { globalSearchQuery = it },
                 onOpenUsers = { term -> q = term; tab = 0; workspacePage = "" },
