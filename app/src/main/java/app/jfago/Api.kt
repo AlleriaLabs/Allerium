@@ -147,6 +147,14 @@ class Api(server: String) {
         call("POST", "/users/labels", JSONObject(labels))
     }
 
+    fun setUserEmails(emails: Map<String, String>) {
+        call("POST", "/users/emails", JSONObject(emails))
+    }
+
+    fun setJfaAdminAccess(access: Map<String, Boolean>) {
+        call("POST", "/users/accounts-admin", JSONObject(access))
+    }
+
     fun announce(ids: List<String>, subject: String, message: String) {
         require(ids.isNotEmpty()) { "Select at least one recipient." }
         require(subject.isNotBlank() && message.isNotBlank()) { "Subject and message are required." }
