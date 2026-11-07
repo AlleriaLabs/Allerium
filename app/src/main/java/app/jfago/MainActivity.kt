@@ -350,7 +350,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     var activitySort by remember { mutableStateOf("Newest") }
     var expandedActivity by remember { mutableStateOf("") }
     var featureDialog by remember { mutableStateOf("") }
-    var diagnosticResult by remember { mutableStateOf("") }
+    var diagnosticChecks by remember { mutableStateOf<List<DiagnosticCheck>>(emptyList()) }
     var diagnosticBusy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
     var dlg by remember { mutableStateOf("") }; var target by remember { mutableStateOf<JSONObject?>(null) }
@@ -410,7 +410,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton({ featureDialog = "notifications" }) { Icon(Icons.Default.Notifications, null, tint = Cyan); Text("Alerts", color = Color.White) }
-                TextButton({ featureDialog = "diagnostics"; diagnosticResult = "" }) { Icon(Icons.Default.Speed, null, tint = Cyan); Text("Diagnostics", color = Color.White) }
+                TextButton({ featureDialog = "diagnostics"; diagnosticChecks = emptyList() }) { Icon(Icons.Default.Speed, null, tint = Cyan); Text("Diagnostics", color = Color.White) }
                 TextButton({ featureDialog = "export" }) { Icon(Icons.Default.FileDownload, null, tint = Cyan); Text("Export", color = Color.White) }
             }
         }
@@ -662,27 +662,77 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             confirmButton = { TextButton({ featureDialog = "" }) { Text("Close", color = Red) } })
     }
     if (featureDialog == "diagnostics") {
+        val passedChecks = diagnosticChecks.count { it.passed }
         AlertDialog(onDismissRequest = { if (!diagnosticBusy) featureDialog = "" }, containerColor = CardC,
             title = { Text("Server diagnostics", color = Color.White) },
-            text = { Column {
-                Text(s.name, color = Color.White, fontWeight = FontWeight.SemiBold)
-                Text(s.url, color = Dim, fontSize = 10.sp)
-                Spacer(Modifier.height(10.dp))
-                Text(diagnosticResult.ifBlank { "Run an authenticated server response test." }, color = Cyan, fontSize = 12.sp)
-                if (diagnosticBusy) LinearProgressIndicator(color = Cyan)
+            text = { Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column {
+                    Text(s.name, color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text(s.url, color = Dim, fontSize = 10.sp)
+                    Spacer(Modifier.height(5.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(if (s.url.trim().startsWith("https://", true)) Icons.Default.Lock else Icons.Default.Warning,
+                            null, tint = if (s.url.trim().startsWith("https://", true)) Green else Color(0xFFFFC36B),
+                            modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (s.url.trim().startsWith("https://", true))
+                            "HTTPS transport configured" else "HTTP connection · HTTPS is recommended",
+                            color = if (s.url.trim().startsWith("https://", true)) Green else Color(0xFFFFC36B),
+                            fontSize = 10.sp)
+                    }
+                }
+                if (diagnosticChecks.isEmpty() && !diagnosticBusy) {
+                    Text("Run a diagnostic to check authenticated JFA-GO endpoints and response times.",
+                        color = Dim, fontSize = 11.sp)
+                }
+                if (diagnosticBusy) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth(), color = Cyan)
+                    Text("Checking server endpoints…", color = Cyan, fontSize = 11.sp)
+                }
+                if (diagnosticChecks.isNotEmpty()) {
+                    val allPassed = passedChecks == diagnosticChecks.size
+                    JCard {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(if (allPassed) Icons.Default.CheckCircle else Icons.Default.ErrorOutline,
+                                null, tint = if (allPassed) Green else Color(0xFFFFC36B))
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(if (allPassed) "All checks passed" else "Some checks need attention",
+                                    color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                Text("$passedChecks of ${diagnosticChecks.size} endpoints responding",
+                                    color = Dim, fontSize = 10.sp)
+                            }
+                        }
+                    }
+                    diagnosticChecks.forEach { check ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                            verticalAlignment = Alignment.Top) {
+                            Icon(if (check.passed) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                null, tint = if (check.passed) Green else Color(0xFFFF8585),
+                                modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(9.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(check.label, color = Color.White, fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold)
+                                Text(check.detail, color = Dim, fontSize = 10.sp)
+                            }
+                            Text("${check.durationMs} ms", color = Cyan, fontSize = 9.sp)
+                        }
+                        Divider(color = Line)
+                    }
+                    Text("Response times measure each authenticated API request from this device. This does not measure CPU, memory, or disk usage.",
+                        color = Dim, fontSize = 9.sp)
+                }
             } },
             confirmButton = { TextButton(enabled = !diagnosticBusy, onClick = {
                 diagnosticBusy = true
                 scope.launch {
-                    val started = System.nanoTime()
-                    diagnosticResult = try {
-                        withContext(Dispatchers.IO) { api.config() }
-                        "Connection successful · " + ((System.nanoTime() - started) / 1000000L) + " ms"
-                    } catch (e: Exception) { "Connection test failed · " + (e.message ?: "Unknown error") }
+                    diagnosticChecks = withContext(Dispatchers.IO) { api.diagnostics() }
                     diagnosticBusy = false
                 }
-            }) { Text("Test connection", color = Red) } },
-            dismissButton = { TextButton({ featureDialog = "" }) { Text("Close") } })
+            }) { Text(if (diagnosticChecks.isEmpty()) "Run diagnostics" else "Run again", color = Red) } },
+            dismissButton = { TextButton(enabled = !diagnosticBusy, onClick = { featureDialog = "" }) { Text("Close") } })
     }
     if (featureDialog == "export") {
         AlertDialog(onDismissRequest = { featureDialog = "" }, containerColor = CardC,
