@@ -341,6 +341,9 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     var authenticating by remember { mutableStateOf(false) }
     var backupMessage by remember { mutableStateOf("") }
     var backupMenuExpanded by remember { mutableStateOf(false) }
+    val favoritePrefs = remember(context) { context.getSharedPreferences("allerium_server_favorites", Context.MODE_PRIVATE) }
+    var favoriteUrls by remember { mutableStateOf(favoritePrefs.getStringSet("urls", emptySet())?.toSet() ?: emptySet()) }
+    var favoritesOnly by remember { mutableStateOf(false) }
     fun handleExportBackup(uri: android.net.Uri?) {
         if (uri != null) {
             try {
@@ -495,7 +498,13 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 }
             }
         }
-        items(servers, key = { it.url }) { s ->
+        item {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = !favoritesOnly, onClick = { favoritesOnly = false }, label = { Text("All servers") })
+            FilterChip(selected = favoritesOnly, onClick = { favoritesOnly = true }, label = { Text("Favorites") })
+        }
+    }
+    items(servers.filter { !favoritesOnly || it.url in favoriteUrls }, key = { it.url }) { s ->
             AnimatedVisibility(visible = true, enter = fadeIn(tween(320)) + slideInVertically(tween(320)) { it / 5 }) {
             AnimatedServerCard(Modifier.clickable(enabled = !authenticating) { selectServer(s) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -513,6 +522,14 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                         Pill(if (o == null) "Checking connection" else if (o) "Server online" else "Unavailable",
                             if (o == true) Green else if (o == false) Color(0xFFFF8A8A) else Cyan)
                     }
+                    IconButton(onClick = {
+                        val next = favoriteUrls.toMutableSet()
+                        if (!next.add(s.url)) next.remove(s.url)
+                        favoriteUrls = next
+                        favoritePrefs.edit().putStringSet("urls", next).apply()
+                    }) { Icon(if (s.url in favoriteUrls) Icons.Default.Star else Icons.Default.StarBorder,
+                        contentDescription = if (s.url in favoriteUrls) "Remove favorite" else "Add favorite",
+                        tint = if (s.url in favoriteUrls) Color(0xFFFFC36B) else Dim) }
                     IconButton({ editing = s }) { Icon(Icons.Default.MoreVert, "Server options", tint = Dim) }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -663,6 +680,12 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     }
     var initialToolModule by remember { mutableStateOf("Users") }
     var workspacePage by remember { mutableStateOf("") }
+    var globalSearchQuery by remember { mutableStateOf("") }
+    val workspacePrefs = remember(ctx, s.url) { ctx.getSharedPreferences("allerium_workspace_${s.url.hashCode()}", Context.MODE_PRIVATE) }
+    var showAnalyticsCard by remember { mutableStateOf(workspacePrefs.getBoolean("dashboard_analytics", true)) }
+    var showNotificationsCard by remember { mutableStateOf(workspacePrefs.getBoolean("dashboard_notifications", true)) }
+    var showDiagnosticsCard by remember { mutableStateOf(workspacePrefs.getBoolean("dashboard_diagnostics", true)) }
+    var showExportsCard by remember { mutableStateOf(workspacePrefs.getBoolean("dashboard_exports", true)) }
     BackHandler(onBack = { if (workspacePage.isNotEmpty()) workspacePage = "" else back() })
     var diagnosticChecks by remember { mutableStateOf<List<DiagnosticCheck>>(emptyList()) }
     var diagnosticBusy by remember { mutableStateOf(false) }
@@ -905,7 +928,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                     StatCard("EXPIRING", centerAlerts.count { it.category == "Accounts" && it.title.contains("soon") }, Color(0xFFFFB547), Icons.Default.Schedule, Modifier.weight(1f))
                     StatCard("ALERTS", unreadNotificationCount, Cyan, Icons.Default.Notifications, Modifier.weight(1f))
                 }
-                JCard {
+                if (showAnalyticsCard) JCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Analytics, null, tint = Cyan, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(10.dp))
@@ -917,7 +940,29 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                     }
                     TextButton(onClick = { workspacePage = "operations" }) { Text("Open Control Center", color = Cyan) }
                 }
-                JCard {
+                JCard(Modifier.clickable { workspacePage = "global-search" }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Search, null, tint = Cyan, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Global search", color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text("Find users, invitations and activity from one page.", color = Dim, fontSize = 10.sp)
+                        }
+                        Icon(Icons.Default.ChevronRight, null, tint = Cyan)
+                    }
+                }
+                JCard(Modifier.clickable { workspacePage = "dashboard-settings" }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Tune, null, tint = Cyan, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Dashboard customization", color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text("Choose which Control Center cards are visible.", color = Dim, fontSize = 10.sp)
+                        }
+                        Icon(Icons.Default.ChevronRight, null, tint = Cyan)
+                    }
+                }
+                if (showNotificationsCard) JCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.NotificationsActive, null, tint = Color(0xFFFFB547), modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(10.dp))
@@ -928,7 +973,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                     }
                     TextButton(onClick = { workspacePage = "notifications" }) { Text("View notifications", color = Cyan) }
                 }
-                JCard {
+                if (showDiagnosticsCard) JCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Speed, null, tint = Cyan, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(10.dp))
@@ -939,7 +984,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                     }
                     TextButton(onClick = { workspacePage = "diagnostics"; diagnosticChecks = emptyList() }) { Text("Run diagnostics", color = Cyan) }
                 }
-                JCard {
+                if (showExportsCard) JCard {
                     Text("Workspace data", color = Color.White, fontWeight = FontWeight.SemiBold)
                     Text("Export users and activity as CSV files.", color = Dim, fontSize = 10.sp)
                     TextButton(onClick = { workspacePage = "export" }) { Text("Export data", color = Cyan) }
@@ -1231,6 +1276,19 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             }, onBack = { workspacePage = "" })
             "export" -> ExportWorkspacePage(users, acts, ctx, onBack = { workspacePage = "" })
             "about" -> AboutAlleriumPage(onBack = { workspacePage = "" })
+            "global-search" -> GlobalSearchPage(users, invites, acts, globalSearchQuery,
+                onQueryChange = { globalSearchQuery = it },
+                onOpenUsers = { term -> q = term; tab = 0; workspacePage = "" },
+                onOpenInvites = { term -> globalSearchQuery = term; tab = 1; workspacePage = "" },
+                onOpenActivity = { term -> activityQuery = term; tab = 2; workspacePage = "" },
+                onBack = { workspacePage = "" })
+            "dashboard-settings" -> DashboardSettingsPage(
+                showAnalyticsCard, showNotificationsCard, showDiagnosticsCard, showExportsCard,
+                onAnalytics = { showAnalyticsCard = it; workspacePrefs.edit().putBoolean("dashboard_analytics", it).apply() },
+                onNotifications = { showNotificationsCard = it; workspacePrefs.edit().putBoolean("dashboard_notifications", it).apply() },
+                onDiagnostics = { showDiagnosticsCard = it; workspacePrefs.edit().putBoolean("dashboard_diagnostics", it).apply() },
+                onExports = { showExportsCard = it; workspacePrefs.edit().putBoolean("dashboard_exports", it).apply() },
+                onBack = { workspacePage = "" })
         }
     }
     }
@@ -1472,5 +1530,105 @@ private fun ExportWorkspacePage(users: List<JSONObject>, acts: List<JSONObject>,
                 shareCsv(context, "Allerium activity.csv", csv)
             }
         }
+    }
+}
+
+
+@Composable
+private fun GlobalSearchPage(
+    users: List<JSONObject>, invites: List<JSONObject>, activities: List<JSONObject>,
+    query: String, onQueryChange: (String) -> Unit,
+    onOpenUsers: (String) -> Unit, onOpenInvites: (String) -> Unit,
+    onOpenActivity: (String) -> Unit, onBack: () -> Unit
+) {
+    val term = query.trim()
+    val userMatches = if (term.isBlank()) emptyList() else users.filter {
+        listOf(it.optString("name"), it.optString("email"), it.optString("id")).any { v -> v.contains(term, true) }
+    }.take(12)
+    val inviteMatches = if (term.isBlank()) emptyList() else invites.filter {
+        listOf(it.optString("code"), it.optString("label"), it.optString("user_label")).any { v -> v.contains(term, true) }
+    }.take(12)
+    val activityMatches = if (term.isBlank()) emptyList() else activities.filter {
+        listOf(it.optString("type"), it.optString("username"), it.optString("value"),
+            it.optString("message"), it.optString("description")).any { v -> v.contains(term, true) }
+    }.take(12)
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
+            Column {
+                Text("Global Search", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                Text("Search users, invitations and activity", color = Dim, fontSize = 10.sp)
+            }
+        }
+        Field(query, onQueryChange, "Search this server")
+        if (term.isBlank()) Text("Search by name, email, invite code, event type or activity detail.", color = Dim, fontSize = 11.sp)
+        else {
+            Text("${userMatches.size + inviteMatches.size + activityMatches.size} matching results", color = Cyan, fontSize = 10.sp)
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (userMatches.isNotEmpty()) {
+                    Text("USERS", color = Dim, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    userMatches.forEach { item ->
+                        JCard(Modifier.clickable { onOpenUsers(item.optString("name")) }) {
+                            Text(item.optString("name"), color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text(item.optString("email").ifBlank { "JFA-GO account" }, color = Dim, fontSize = 10.sp)
+                        }
+                    }
+                }
+                if (inviteMatches.isNotEmpty()) {
+                    Text("INVITATIONS", color = Dim, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    inviteMatches.forEach { item ->
+                        JCard(Modifier.clickable { onOpenInvites(item.optString("code")) }) {
+                            Text(item.optString("code"), color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text(item.optString("label").ifBlank { "Invitation" }, color = Dim, fontSize = 10.sp)
+                        }
+                    }
+                }
+                if (activityMatches.isNotEmpty()) {
+                    Text("ACTIVITY", color = Dim, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    activityMatches.forEach { item ->
+                        JCard(Modifier.clickable { onOpenActivity(term) }) {
+                            Text(item.optString("type").replace('_', ' ').ifBlank { "Activity" }, color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text(item.optString("message").ifBlank { item.optString("description") }, color = Dim, fontSize = 10.sp, maxLines = 2)
+                        }
+                    }
+                }
+                if (userMatches.isEmpty() && inviteMatches.isEmpty() && activityMatches.isEmpty()) {
+                    Text("No results found.", color = Dim, modifier = Modifier.padding(16.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardSettingsPage(
+    analytics: Boolean, notifications: Boolean, diagnostics: Boolean, exports: Boolean,
+    onAnalytics: (Boolean) -> Unit, onNotifications: (Boolean) -> Unit,
+    onDiagnostics: (Boolean) -> Unit, onExports: (Boolean) -> Unit, onBack: () -> Unit
+) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
+            Column {
+                Text("Dashboard Settings", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                Text("Customize the Control Center", color = Dim, fontSize = 10.sp)
+            }
+        }
+        Text("Visible cards", color = Cyan, fontSize = 12.sp)
+        listOf(
+            Triple("Analytics & audit", analytics, onAnalytics),
+            Triple("Notifications", notifications, onNotifications),
+            Triple("Server diagnostics", diagnostics, onDiagnostics),
+            Triple("Workspace exports", exports, onExports)
+        ).forEach { (label, checked, change) ->
+            JCard {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(label, color = Color.White, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    Switch(checked = checked, onCheckedChange = change)
+                }
+            }
+        }
+        Text("Preferences are saved locally for this server. Hiding a card does not disable its feature.", color = Dim, fontSize = 10.sp)
     }
 }
