@@ -92,10 +92,10 @@ private fun installCrashDiagnostics(context: Context) {
                 error.printStackTrace(PrintWriter(writer))
             }.toString()
             val packageInfo = if (Build.VERSION.SDK_INT >= 33) {
-                packageManager.getPackageInfo(packageName, android.content.pm.PackageManager.PackageInfoFlags.of(0))
+                app.packageManager.getPackageInfo(app.packageName, android.content.pm.PackageManager.PackageInfoFlags.of(0))
             } else {
                 @Suppress("DEPRECATION")
-                packageManager.getPackageInfo(packageName, 0)
+                app.packageManager.getPackageInfo(app.packageName, 0)
             }
             val version = packageInfo.versionName ?: "unknown"
             val report = buildString {
