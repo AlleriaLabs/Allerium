@@ -200,7 +200,7 @@ fun OperationsCenterPage(
                                         try {
                                             val count = backupRetention.toInt()
                                             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                                api.setConfig("backups", "keep_n_backups", count)
+                                                api.setConfig("backups", "keep_n_backups", count.toString())
                                             }
                                             feedback = "JFA-GO backup retention saved: keep $count backups."
                                         } catch (e: Exception) {
