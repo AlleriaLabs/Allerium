@@ -1875,6 +1875,7 @@ private fun AppSecurityPage(onBack: () -> Unit) {
     val prefs = remember(context) { context.getSharedPreferences("allerium_app_security", Context.MODE_PRIVATE) }
     var enabled by remember { mutableStateOf(prefs.getBoolean("lock_enabled", false)) }
     var timeout by remember { mutableIntStateOf(prefs.getInt("lock_timeout_minutes", 0)) }
+    var securityNotice by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
@@ -1889,13 +1890,32 @@ private fun AppSecurityPage(onBack: () -> Unit) {
                     Text("Automatic app lock", color = Color.White, fontWeight = FontWeight.SemiBold)
                     Text("Require device authentication after Allerium stays in the background.", color = Dim, fontSize = 10.sp)
                 }
-                Switch(checked = enabled, onCheckedChange = {
-                    enabled = it
-                    prefs.edit().putBoolean("lock_enabled", it).apply()
-                    if (!it) prefs.edit().remove("background_at").apply()
+                Switch(checked = enabled, onCheckedChange = { requested ->
+                    if (!requested) {
+                        enabled = false
+                        prefs.edit().putBoolean("lock_enabled", false).remove("background_at").apply()
+                        securityNotice = "Automatic app lock disabled."
+                    } else {
+                        val authenticators = if (Build.VERSION.SDK_INT >= 30)
+                            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                        else BiometricManager.Authenticators.BIOMETRIC_STRONG
+                        val capability = BiometricManager.from(context).canAuthenticate(authenticators)
+                        if (capability == BiometricManager.BIOMETRIC_SUCCESS) {
+                            enabled = true
+                            prefs.edit().putBoolean("lock_enabled", true).apply()
+                            securityNotice = "Automatic app lock enabled."
+                        } else {
+                            securityNotice = when (capability) {
+                                BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> "Set up a device PIN, pattern, password, or supported biometric before enabling app lock."
+                                BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> "This device has no supported strong biometric. Set a device credential and try again."
+                                else -> "Android device authentication is unavailable. Configure a screen lock and try again."
+                            }
+                        }
+                    }
                 })
             }
         }
+        if (securityNotice.isNotBlank()) Text(securityNotice, color = Cyan, fontSize = 10.sp)
         JCard {
             Text("Lock after", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             listOf(0 to "Immediately", 1 to "1 minute", 5 to "5 minutes", 15 to "15 minutes").forEach { (minutes, label) ->
