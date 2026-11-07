@@ -118,9 +118,6 @@ private fun showBiometricPrompt(
                 if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON) onPasswordFallback()
                 else onError(errString.toString())
             }
-            override fun onAuthenticationFailed() {
-                onError("Biometric not recognized. Try again or use your password.")
-            }
         })
     val info = BiometricPrompt.PromptInfo.Builder()
         .setTitle(title)
