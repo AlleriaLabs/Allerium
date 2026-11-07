@@ -426,26 +426,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     Box(Modifier.fillMaxSize()) {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 88.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
-            Header("Your secure JFA-GO workspace") {
-                Box {
-                    IconButton(onClick = { backupMenuExpanded = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Server options", tint = Dim)
-                    }
-                    DropdownMenu(expanded = backupMenuExpanded, onDismissRequest = { backupMenuExpanded = false },
-                        modifier = Modifier.background(CardC)) {
-                        DropdownMenuItem(
-                            text = { Text("Create server backup", color = Color.White) },
-                            leadingIcon = { Icon(Icons.Default.FileDownload, null, tint = Cyan) },
-                            onClick = { backupMenuExpanded = false; launchServerBackupExport() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Restore server backup", color = Color.White) },
-                            leadingIcon = { Icon(Icons.Default.Restore, null, tint = Cyan) },
-                            onClick = { backupMenuExpanded = false; launchServerBackupImport() }
-                        )
-                    }
-                }
-            }
+            Header("Your secure JFA-GO workspace")
         }
         if (authenticating) item { Text("Connecting securely…", color = Cyan, fontSize = 11.sp) }
         if (authError.isNotBlank()) item { Text(authError, color = Color(0xFFFF8A8A), fontSize = 11.sp) }
@@ -507,15 +488,6 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         Spacer(Modifier.width(8.dp))
         Text("Add server", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
     }
-    }
-    if (backupMessage.isNotBlank()) {
-        AlertDialog(
-            onDismissRequest = { backupMessage = "" },
-            containerColor = CardC,
-            title = { Text("Server backup", color = Color.White) },
-            text = { Text(backupMessage, color = Dim, fontSize = 12.sp) },
-            confirmButton = { TextButton(onClick = { backupMessage = "" }) { Text("Done", color = Red) } }
-        )
     }
     if (adding || editing != null) {
         val old = editing
@@ -738,8 +710,29 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                     DropdownMenu(expanded = backupMenuExpanded, onDismissRequest = { backupMenuExpanded = false },
                         modifier = Modifier.background(CardC)) {
                         DropdownMenuItem(
-                            text = { Text("Create server backup", color = Color.White) },
+                            text = { Text("Alerts", color = Color.White) },
+                            leadingIcon = { Icon(Icons.Default.Notifications, null, tint = Cyan) },
+                            onClick = { backupMenuExpanded = false; featureDialog = "notifications" }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Diagnostics", color = Color.White) },
+                            leadingIcon = { Icon(Icons.Default.Speed, null, tint = Cyan) },
+                            onClick = { backupMenuExpanded = false; featureDialog = "diagnostics"; diagnosticChecks = emptyList() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Export workspace data", color = Color.White) },
                             leadingIcon = { Icon(Icons.Default.FileDownload, null, tint = Cyan) },
+                            onClick = { backupMenuExpanded = false; featureDialog = "export" }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("All tools", color = Color.White) },
+                            leadingIcon = { Icon(Icons.Default.Tune, null, tint = Cyan) },
+                            onClick = { backupMenuExpanded = false; advancedModulesOpen = true }
+                        )
+                        HorizontalDivider(color = Line)
+                        DropdownMenuItem(
+                            text = { Text("Create server backup", color = Color.White) },
+                            leadingIcon = { Icon(Icons.Default.Save, null, tint = Cyan) },
                             onClick = { backupMenuExpanded = false; launchBackupExport() }
                         )
                         DropdownMenuItem(
@@ -756,14 +749,6 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 StatCard("TOTAL USERS", users.size, Red, Icons.Default.Groups, Modifier.weight(1f))
                 StatCard("INVITATIONS", invites.size, Color(0xFFB8BBC0), Icons.Default.ConfirmationNumber, Modifier.weight(1f))
                 StatCard("DISABLED", off, Color(0xFFFFB547), Icons.Default.Block, Modifier.weight(1f))
-            }
-        }
-        item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton({ featureDialog = "notifications" }) { Icon(Icons.Default.Notifications, null, tint = Cyan); Text("Alerts", color = Color.White) }
-                TextButton({ featureDialog = "diagnostics"; diagnosticChecks = emptyList() }) { Icon(Icons.Default.Speed, null, tint = Cyan); Text("Diagnostics", color = Color.White) }
-                TextButton({ featureDialog = "export" }) { Icon(Icons.Default.FileDownload, null, tint = Cyan); Text("Export", color = Color.White) }
-                TextButton({ advancedModulesOpen = true }) { Icon(Icons.Default.Tune, null, tint = Cyan); Text("All tools", color = Color.White) }
             }
         }
         item {
