@@ -47,8 +47,11 @@ jobs:
             fi
           done
           mkdir -p "$RUNNER_TEMP/allerium-signing"
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/allerium-signing/allerium-release.jks"
+          # Strip whitespace and any copied BOM/formatting characters before decoding.
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' | base64 --decode > "$RUNNER_TEMP/allerium-signing/allerium-release.jks"
           test -s "$RUNNER_TEMP/allerium-signing/allerium-release.jks"
+          keytool -list -keystore "$RUNNER_TEMP/allerium-signing/allerium-release.jks" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" >/dev/null
+          echo "Signing keystore decoded and validated."
 
       - name: Build signed release APK
         env:
