@@ -376,6 +376,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     val favoritePrefs = remember(context) { context.getSharedPreferences("allerium_server_favorites", Context.MODE_PRIVATE) }
     var favoriteUrls by remember { mutableStateOf(favoritePrefs.getStringSet("urls", emptySet())?.toSet() ?: emptySet()) }
     var favoritesOnly by remember { mutableStateOf(false) }
+    var aboutOpen by remember { mutableStateOf(false) }
     fun handleExportBackup(uri: android.net.Uri?) {
         if (uri != null) {
             try {
@@ -480,13 +481,21 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             connectWithStoredPassword(s, stored)
         }
     }
+    if (aboutOpen) {
+        AboutAlleriumPage(onBack = { aboutOpen = false })
+        return
+    }
     LaunchedEffect(servers) { servers.forEach { s -> launch(Dispatchers.IO) {
         online[s.url] = try { (URL(s.url).openConnection() as HttpURLConnection).run { connectTimeout = 4000; readTimeout = 4000; responseCode; true } } catch (e: Exception) { false } } } }
     Box(Modifier.fillMaxSize()) {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 88.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Header("Your secure JFA-GO workspace") {
-                Box {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { aboutOpen = true }) {
+                        Icon(Icons.Default.Info, contentDescription = "About Allerium", tint = Cyan)
+                    }
+                    Box {
                     IconButton(onClick = { backupMenuExpanded = true }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "Backup options", tint = Dim)
                     }
@@ -505,6 +514,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                             leadingIcon = { Icon(Icons.Default.Restore, null, tint = Cyan) },
                             onClick = { backupMenuExpanded = false; launchServerBackupImport() }
                         )
+                    }
                     }
                 }
             }
@@ -1942,5 +1952,86 @@ private fun AppSecurityPage(onBack: () -> Unit) {
             Text("Allerium uses Android's secure system prompt. On Android 11 and newer, you can unlock with a strong biometric or your device PIN, pattern, or password. Older Android versions use supported strong biometrics.", color = Dim, fontSize = 10.sp)
         }
         Text("This lock protects access to the app UI on this device. It does not replace your Android screen lock, server credentials, or JFA-GO permissions.", color = Dim, fontSize = 10.sp)
+    }
+}
+
+@Composable
+private fun AboutAlleriumPage(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val version = remember(context) {
+        try {
+            val info = if (Build.VERSION.SDK_INT >= 33) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    android.content.pm.PackageManager.PackageInfoFlags.of(0)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+            info.versionName ?: "Unknown"
+        } catch (_: Exception) {
+            "Unknown"
+        }
+    }
+    Column(
+        Modifier.fillMaxSize().background(Bg).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Cyan)
+            }
+            Column {
+                Text("About Allerium", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                Text("Application information", color = Dim, fontSize = 10.sp)
+            }
+        }
+        Column(
+            Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            androidx.compose.foundation.Image(
+                painter = androidx.compose.ui.res.painterResource(R.drawable.allerium_mark),
+                contentDescription = "Allerium logo",
+                modifier = Modifier.size(88.dp)
+            )
+            Text("ALLERIUM", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
+            Text("BY ALLERIA LABS", color = Cyan, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 2.sp)
+            Pill("VERSION $version", Cyan)
+        }
+        JCard {
+            Text("Your JFA-GO workspace, in your pocket.", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Allerium is a companion app for managing your JFA-GO servers. It brings server access, account administration, and useful workspace tools together in one secure Android experience.",
+                color = Dim, fontSize = 11.sp, lineHeight = 18.sp
+            )
+        }
+        JCard {
+            Text("What you can do", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            listOf(
+                Icons.Default.Dns to ("Server management" to "Save and organize multiple JFA-GO server profiles."),
+                Icons.Default.People to ("Account tools" to "Manage users, invitations, and server workspace activity."),
+                Icons.Default.Build to ("Workspace tools" to "Access diagnostics, exports, and other server utilities."),
+                Icons.Default.Backup to ("Backup and restore" to "Export server profiles and restore them when needed."),
+                Icons.Default.Security to ("Privacy and security" to "Protect saved credentials and optionally lock app access.")
+            ).forEach { (icon, item) ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.Top) {
+                    Icon(icon, contentDescription = null, tint = Cyan, modifier = Modifier.size(19.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(item.first, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Text(item.second, color = Dim, fontSize = 10.sp, lineHeight = 15.sp)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        Text(
+            "© Alleria Labs. Allerium is an independent JFA-GO companion application.",
+            color = Dim, fontSize = 9.sp, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
     }
 }
