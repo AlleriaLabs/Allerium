@@ -5,6 +5,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 
 class Api(server: String) {
     val base = server.trim().trimEnd('/')
@@ -118,8 +119,101 @@ class Api(server: String) {
     }
 
     fun setExpiry(id: String, days: Int) {
-        call("POST", "/users/expiry", JSONObject().put("users", JSONArray().put(id)).put("months", 0)
-            .put("days", days).put("hours", 0).put("minutes", 0).put("notify", false))
+        call("POST", "/users/extend", JSONObject().put("users", JSONArray().put(id))
+            .put("months", 0).put("days", days).put("hours", 0).put("minutes", 0).put("notify", false))
+    }
+
+    fun bulkSetEnabled(ids: List<String>, enabled: Boolean) {
+        require(ids.isNotEmpty()) { "Select at least one user." }
+        call("POST", "/users/enable", JSONObject().put("users", JSONArray(ids))
+            .put("enabled", enabled).put("notify", false))
+    }
+
+    fun bulkDeleteUsers(ids: List<String>) {
+        require(ids.isNotEmpty()) { "Select at least one user." }
+        call("DELETE", "/users", JSONObject().put("users", JSONArray(ids)).put("notify", false))
+    }
+
+    fun bulkSetExpiry(ids: List<String>, days: Int) {
+        require(ids.isNotEmpty()) { "Select at least one user." }
+        require(days > 0) { "Expiry days must be greater than zero." }
+        call("POST", "/users/extend", JSONObject().put("users", JSONArray(ids))
+            .put("months", 0).put("days", days).put("hours", 0).put("minutes", 0).put("notify", false))
+    }
+
+    fun removeExpiry(id: String) {
+        call("DELETE", "/users/$id/expiry")
+    }
+
+    fun setUserLabels(labels: Map<String, String>) {
+        call("POST", "/users/labels", JSONObject(labels))
+    }
+
+    fun announce(ids: List<String>, subject: String, message: String) {
+        require(ids.isNotEmpty()) { "Select at least one recipient." }
+        require(subject.isNotBlank() && message.isNotBlank()) { "Subject and message are required." }
+        call("POST", "/users/announce", JSONObject().put("users", JSONArray(ids))
+            .put("subject", subject).put("message", message))
+    }
+
+    fun announcementTemplates(): List<String> {
+        val o = JSONObject(call("GET", "/users/announce"))
+        val a = o.optJSONArray("announcements") ?: JSONArray()
+        return (0 until a.length()).map { a.optString(it) }
+    }
+
+    fun saveAnnouncementTemplate(name: String, subject: String, message: String) {
+        call("POST", "/users/announce/template",
+            JSONObject().put("name", name).put("subject", subject).put("message", message))
+    }
+
+    fun sendInvite(code: String, recipient: String) {
+        call("POST", "/invites/send", JSONObject().put("invite", code).put("send-to", recipient))
+    }
+
+    fun editInvite(code: String, label: String, userLabel: String, profile: String) {
+        val body = JSONObject().put("code", code).put("label", label)
+            .put("user_label", userLabel).put("profile", profile)
+        call("PATCH", "/invites/edit", body)
+    }
+
+    fun serverBackups(): List<JSONObject> {
+        val root = JSONObject(call("GET", "/backups"))
+        val a = root.optJSONArray("backups") ?: JSONArray()
+        return (0 until a.length()).map { a.getJSONObject(it) }
+    }
+
+    fun createServerBackup(): JSONObject = JSONObject(call("POST", "/backups"))
+
+    fun restoreServerBackup(filename: String) {
+        val safe = URLEncoder.encode(filename, "UTF-8").replace("+", "%20")
+        call("POST", "/backups/restore/$safe")
+    }
+
+    fun jellyseerrUsers(): List<JSONObject> {
+        val root = JSONObject(call("GET", "/jellyseerr/users"))
+        val a = root.optJSONArray("users") ?: JSONArray()
+        return (0 until a.length()).map { a.getJSONObject(it) }
+    }
+
+    fun setJellyseerrProfile(profile: String, jellyseerrUserId: String) {
+        val p = URLEncoder.encode(profile, "UTF-8").replace("+", "%20")
+        call("POST", "/profiles/jellyseerr/$p/$jellyseerrUserId")
+    }
+
+    fun removeJellyseerrProfile(profile: String) {
+        val p = URLEncoder.encode(profile, "UTF-8").replace("+", "%20")
+        call("DELETE", "/profiles/jellyseerr/$p")
+    }
+
+    fun rawProfile(profile: String): JSONObject {
+        val p = URLEncoder.encode(profile, "UTF-8").replace("+", "%20")
+        return JSONObject(call("GET", "/profiles/raw/$p"))
+    }
+
+    fun updateRawProfile(profile: String, body: JSONObject) {
+        val p = URLEncoder.encode(profile, "UTF-8").replace("+", "%20")
+        call("PUT", "/profiles/raw/$p", body)
     }
 
     fun deleteInvite(code: String) {
