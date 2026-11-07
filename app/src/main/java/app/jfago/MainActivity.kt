@@ -1391,7 +1391,7 @@ private fun ExportWorkspacePage(users: List<JSONObject>, acts: List<JSONObject>,
                     append("time,type,username,details\n")
                     acts.forEach { item ->
                         val values = listOf(item.optLong("time").toString(), item.optString("type"), item.optString("username"), item.optString("message").ifBlank { item.optString("description") })
-                        append(values.joinToString(",") { "\"" + it.replace("\"", "\"\"") + "\"" }); append('\\n')
+                        append(values.joinToString(",") { "\"" + it.replace("\"", "\"\"") + "\"" }); append('\n')
                     }
                 }
                 shareCsv(context, "Allerium activity.csv", csv)
