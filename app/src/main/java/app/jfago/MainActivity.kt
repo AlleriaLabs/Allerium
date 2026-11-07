@@ -1063,7 +1063,6 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                     Triple("Backups", "Browse, download, upload and restore server backups.", Icons.Default.Backup),
                     Triple("Settings", "Inspect and manage supported JFA-GO configuration.", Icons.Default.Settings),
                     Triple("Integrations", "Manage available integration modules.", Icons.Default.Extension),
-                    Triple("About Allerium", "Branding, app information and version details.", Icons.Default.Info),
                     Triple("App Security", "Automatic app lock and device authentication.", Icons.Default.Security)
                 ).forEach { item ->
                     JCard(Modifier.clickable {
