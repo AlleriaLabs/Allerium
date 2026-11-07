@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -349,6 +350,9 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     var diagnosticBusy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
     var dlg by remember { mutableStateOf("") }; var target by remember { mutableStateOf<JSONObject?>(null) }
+    var resetLink by remember { mutableStateOf("") }
+    var resetMessage by remember { mutableStateOf("") }
+    var resetBusy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope(); val ctx = LocalContext.current
     fun refresh() = scope.launch { try { withContext(Dispatchers.IO) { users = api.users(); invites = api.invites(); acts = try { api.activity() } catch (e: Exception) { acts }; profs = try { api.profiles() } catch (e: Exception) { profs } }; msg = "" } catch (e: Exception) { msg = e.message ?: "Error" } }
     fun act(b: () -> Unit) = scope.launch { try { withContext(Dispatchers.IO) { b() } } catch (e: Exception) { msg = e.message ?: "Error" }; refresh() }
@@ -462,6 +466,10 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                             modifier = Modifier.scale(0.68f),
                             colors = SwitchDefaults.colors(checkedTrackColor = Red, checkedThumbColor = Color.White, uncheckedTrackColor = Line))
                         Spacer(Modifier.weight(1f))
+                        TextButton({ target = u; dlg = "reset-confirm"; resetLink = ""; resetMessage = "" }) {
+                            Icon(Icons.Default.Lock, null, tint = Cyan, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp)); Text("Reset", color = Cyan, fontSize = 10.sp)
+                        }
                         TextButton({ target = u; dlg = "expiry" }) {
                             Icon(Icons.Default.Schedule, null, tint = Dim, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp)); Text("Expiry", color = Dim, fontSize = 10.sp)
@@ -559,15 +567,18 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         }
     }
     if (tab == 0) {
-        Row(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 78.dp)
-            .clip(RoundedCornerShape(50)).background(Red)
-            .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(50))
-            .clickable { dlg = "user" }.padding(horizontal = 18.dp, vertical = 13.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.PersonAdd, contentDescription = "Create user", tint = Color.White, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Add user", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-        }
+        ExtendedFloatingActionButton(
+            onClick = { dlg = "user" },
+            modifier = Modifier.align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 82.dp)
+                .zIndex(3f),
+            containerColor = Red,
+            contentColor = Color.White,
+            shape = RoundedCornerShape(50),
+            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 12.dp, pressedElevation = 16.dp),
+            icon = { Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            text = { Text("Add user", fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+        )
     }
     }
 
@@ -648,6 +659,62 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     }
 
     val close = { dlg = ""; target = null }
+    if (dlg == "reset-confirm") target?.let { u ->
+        AlertDialog(
+            onDismissRequest = { if (!resetBusy) close() },
+            containerColor = CardC,
+            title = { Text("Reset ${u.optString("name")}'s password?", color = Color.White) },
+            text = { Text(
+                "Allerium will ask JFA-GO to generate an administrator-initiated reset link. If the account has a delivery method, JFA-GO can send the instructions. Otherwise, you can copy and share the link manually. The link expires after 30 minutes.",
+                color = Dim, fontSize = 12.sp
+            ) },
+            confirmButton = {
+                TextButton(enabled = !resetBusy, onClick = {
+                    val userId = u.optString("id")
+                    resetBusy = true
+                    scope.launch {
+                        try {
+                            val result = withContext(Dispatchers.IO) { api.adminPasswordReset(userId) }
+                            resetLink = result.optString("link")
+                            resetMessage = if (result.optBoolean("manual")) {
+                                "No delivery method is configured for this account. Copy the link below and send it to the user securely."
+                            } else if (resetLink.isNotBlank()) {
+                                "JFA-GO generated the reset link. Instructions may also have been sent using the user's configured delivery method."
+                            } else {
+                                "JFA-GO accepted the reset request. Check the user's configured delivery method."
+                            }
+                            dlg = "reset-result"
+                        } catch (e: Exception) {
+                            msg = e.message ?: "Password reset request failed."
+                            close()
+                        } finally { resetBusy = false }
+                    }
+                }) { Text(if (resetBusy) "Working…" else "Generate reset link", color = Red) }
+            },
+            dismissButton = { TextButton(enabled = !resetBusy, onClick = close) { Text("Cancel") } }
+        )
+    }
+    if (dlg == "reset-result") {
+        AlertDialog(
+            onDismissRequest = close,
+            containerColor = CardC,
+            title = { Text("Password reset", color = Color.White) },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(resetMessage, color = Dim, fontSize = 12.sp)
+                if (resetLink.isNotBlank()) {
+                    SelectionContainer { Text(resetLink, color = Cyan, fontSize = 11.sp) }
+                    Text("Treat this link like a password. Anyone who has it may be able to reset the account.", color = Color(0xFFFFC36B), fontSize = 10.sp)
+                }
+            } },
+            confirmButton = {
+                if (resetLink.isNotBlank()) TextButton(onClick = {
+                    (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                        .setPrimaryClip(ClipData.newPlainText("Allerium password reset link", resetLink))
+                }) { Text("Copy link", color = Red) }
+                TextButton(onClick = close) { Text("Done", color = Red) }
+            }
+        )
+    }
     if (dlg == "invite" || dlg == "expiry") {
         var a by remember { mutableStateOf(if (dlg == "invite") "7" else "30") }; var b by remember { mutableStateOf("1") }; var st by remember { mutableStateOf("") }; var pf by remember { mutableStateOf("") }
         AlertDialog(close, containerColor = CardC, title = { Text(if (dlg == "invite") "New invite" else "Set expiry") },
