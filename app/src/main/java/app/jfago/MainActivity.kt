@@ -325,7 +325,8 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     val scope = rememberCoroutineScope()
     var authError by remember { mutableStateOf("") }
     var authenticating by remember { mutableStateOf(false) }
-    var backupMessage by remember { mutableStateOf("") }\n    var backupMenuExpanded by remember { mutableStateOf(false) }
+    var backupMessage by remember { mutableStateOf("") }
+    var backupMenuExpanded by remember { mutableStateOf(false) }
     fun handleExportBackup(uri: android.net.Uri?) {
         if (uri != null) {
             try {
