@@ -25,7 +25,7 @@ import java.text.DateFormat
 import java.util.Date
 
 @Composable
-fun AdvancedModulesDialog(
+fun AdvancedModulesPage(
     api: Api,
     users: List<JSONObject>,
     invites: List<JSONObject>,
@@ -103,20 +103,18 @@ fun AdvancedModulesDialog(
         }
     }
 
-    AlertDialog(
-        onDismissRequest = { if (!busy) onClose() },
-        containerColor = CardC,
-        title = {
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("Allerium tools", color = Color.White)
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { if (!busy) onClose() }) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
+            Column(Modifier.weight(1f)) {
+                Text("All Tools", color = Color.White, fontSize = 21.sp)
                 Text("Extended JFA-GO administration", color = Dim, fontSize = 10.sp)
             }
-        },
-        text = {
-            Column(
-                Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
+        }
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
                 // Keep the module selector on one line; narrow phones can scroll it horizontally.
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -390,9 +388,6 @@ fun AdvancedModulesDialog(
                     Text(feedback, color = if (feedback.contains("failed", true) || feedback.contains("error", true)) Color(0xFFFF8585) else Cyan, fontSize = 10.sp)
                 }
             }
-        },
-        confirmButton = { TextButton(enabled = !busy, onClick = onClose) { Text("Done", color = Red) } }
-    )
 
     if (confirmDelete) {
         AlertDialog(
