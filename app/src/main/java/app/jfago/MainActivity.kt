@@ -681,6 +681,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     var initialToolModule by remember { mutableStateOf("Users") }
     var workspacePage by remember { mutableStateOf("") }
     var globalSearchQuery by remember { mutableStateOf("") }
+    var selectedUser by remember { mutableStateOf<JSONObject?>(null) }
     val workspacePrefs = remember(ctx, s.url) { ctx.getSharedPreferences("allerium_workspace_${s.url.hashCode()}", Context.MODE_PRIVATE) }
     var showAnalyticsCard by remember { mutableStateOf(workspacePrefs.getBoolean("dashboard_analytics", true)) }
     var showNotificationsCard by remember { mutableStateOf(workspacePrefs.getBoolean("dashboard_notifications", true)) }
@@ -1088,6 +1089,10 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                             modifier = Modifier.scale(0.68f),
                             colors = SwitchDefaults.colors(checkedTrackColor = Red, checkedThumbColor = Color.White, uncheckedTrackColor = Line))
                         Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { selectedUser = u; workspacePage = "user-detail" }) {
+                            Icon(Icons.Default.Info, null, tint = Cyan, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(3.dp)); Text("Details", color = Cyan, fontSize = 9.sp)
+                        }
                         TextButton({ target = u; dlg = "reset-confirm"; resetLink = ""; resetMessage = "" }) {
                             Icon(Icons.Default.Lock, null, tint = Cyan, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp)); Text("Reset", color = Cyan, fontSize = 10.sp)
@@ -1289,6 +1294,12 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 onDiagnostics = { showDiagnosticsCard = it; workspacePrefs.edit().putBoolean("dashboard_diagnostics", it).apply() },
                 onExports = { showExportsCard = it; workspacePrefs.edit().putBoolean("dashboard_exports", it).apply() },
                 onBack = { workspacePage = "" })
+            "user-detail" -> selectedUser?.let { user ->
+                UserDetailsPage(user,
+                    onToggle = { enabled -> act { api.setEnabled(user.optString("id"), enabled) }; workspacePage = "" },
+                    onReset = { target = user; dlg = "reset-confirm"; resetLink = ""; resetMessage = ""; workspacePage = "" },
+                    onBack = { workspacePage = "" })
+            }
         }
     }
     }
@@ -1630,5 +1641,67 @@ private fun DashboardSettingsPage(
             }
         }
         Text("Preferences are saved locally for this server. Hiding a card does not disable its feature.", color = Dim, fontSize = 10.sp)
+    }
+}
+
+
+@Composable
+private fun UserDetailsPage(
+    user: JSONObject, onToggle: (Boolean) -> Unit, onReset: () -> Unit, onBack: () -> Unit
+) {
+    val name = user.optString("name").ifBlank { "User account" }
+    val expiry = user.optLong("expiry")
+    val expiryText = if (expiry <= 0L) "No expiry set" else DateFormat.getDateTimeInstance().format(
+        Date(if (expiry > 1_000_000_000_000L) expiry else expiry * 1000L))
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
+            Column {
+                Text("User Details", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                Text(name, color = Dim, fontSize = 10.sp)
+            }
+        }
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            JCard {
+                Text(name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(user.optString("email").ifBlank { "No email address" }, color = Dim, fontSize = 11.sp)
+                Spacer(Modifier.height(8.dp))
+                Pill(if (user.optBoolean("admin")) "ADMIN" else if (user.optBoolean("disabled")) "DISABLED" else "ACTIVE",
+                    if (user.optBoolean("disabled")) Color(0xFFFF8A8A) else Green)
+            }
+            JCard {
+                Text("Account information", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                listOf(
+                    "User ID" to user.optString("id"),
+                    "Email" to user.optString("email"),
+                    "Role" to if (user.optBoolean("admin")) "Administrator" else "Standard user",
+                    "Status" to if (user.optBoolean("disabled")) "Disabled" else "Enabled",
+                    "Expiry" to expiryText,
+                    "Labels" to user.opt("labels").toString().takeIf { it != "null" }.orEmpty()
+                ).forEach { (label, value) ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(label, color = Dim, fontSize = 10.sp)
+                        Text(value.ifBlank { "—" }, color = Color.White, fontSize = 10.sp)
+                    }
+                    HorizontalDivider(color = Line)
+                }
+            }
+            JCard {
+                Text("Additional server fields", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                user.keys().asSequence().sorted().forEach { key ->
+                    val value = user.opt(key)?.toString().orEmpty()
+                    if (value.isNotBlank() && value != "null" && key !in setOf("password", "token", "access_token")) {
+                        Text("${key.replace('_', ' ')}: ${value.take(240)}", color = Dim, fontSize = 9.sp)
+                    }
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(modifier = Modifier.weight(1f), onClick = onReset) { Text("Reset password") }
+            Button(modifier = Modifier.weight(1f), onClick = { onToggle(user.optBoolean("disabled")) }) {
+                Text(if (user.optBoolean("disabled")) "Enable account" else "Disable account")
+            }
+        }
     }
 }
