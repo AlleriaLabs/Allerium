@@ -16,6 +16,13 @@ class ScheduledBackupWorker(
         val url = inputData.getString("url") ?: return@withContext Result.failure()
         val user = inputData.getString("user") ?: return@withContext Result.failure()
         val prefs = applicationContext.getSharedPreferences("allerium_backup_automation", Context.MODE_PRIVATE)
+        fun recordHistory(result: String) {
+            val key = "history_$url"
+            val history = org.json.JSONArray(prefs.getString(key, "[]") ?: "[]")
+            history.put(org.json.JSONObject().put("time", System.currentTimeMillis()).put("result", result))
+            while (history.length() > 20) history.remove(0)
+            prefs.edit().putString(key, history.toString()).apply()
+        }
         try {
             val masterKey = MasterKey.Builder(applicationContext)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
@@ -31,10 +38,13 @@ class ScheduledBackupWorker(
             api.createServerBackup()
             prefs.edit().putLong("last_success_$url", System.currentTimeMillis())
                 .putString("last_result_$url", "success").apply()
+            recordHistory("Success")
             Result.success()
         } catch (e: Exception) {
+            val detail = e.message ?: "Backup failed"
             prefs.edit().putLong("last_attempt_$url", System.currentTimeMillis())
-                .putString("last_result_$url", e.message ?: "Backup failed").apply()
+                .putString("last_result_$url", detail).apply()
+            recordHistory("Failed: $detail")
             if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
     }
