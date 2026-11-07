@@ -112,6 +112,12 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installCrashDiagnostics(applicationContext)
         super.onCreate(savedInstanceState)
+        ReleaseUpdateWorker.schedule(applicationContext)
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
+            !shouldShowRequestPermissionRationale(android.Manifest.permission.POST_NOTIFICATIONS)) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 7301)
+        }
         window.statusBarColor = Bg.toArgb(); window.navigationBarColor = Bg.toArgb()
         val cs = darkColorScheme(primary = Red, background = Bg, surface = Bg, onSurface = Color.White,
             surfaceVariant = CardC, onPrimary = Color.White, secondaryContainer = PillC)
