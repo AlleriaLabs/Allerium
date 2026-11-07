@@ -103,7 +103,8 @@ object UpdateChecker {
             connection.readTimeout = 60000
             connection.instanceFollowRedirects = true
             connection.setRequestProperty("User-Agent", "Allerium-Android")
-            val file = File(context.cacheDir, "Allerium-update.apk")
+            val updateDirectory = File(context.cacheDir, "updates").apply { mkdirs() }
+            val file = File(updateDirectory, "Allerium-update.apk")
             try {
                 val code = connection.responseCode
                 if (code >= 400) throw IllegalStateException("GitHub download failed (HTTP $code).")
