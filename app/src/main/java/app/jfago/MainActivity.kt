@@ -1898,10 +1898,21 @@ private fun DashboardSettingsPage(
 private fun UserDetailsPage(
     user: JSONObject, onToggle: (Boolean) -> Unit, onReset: () -> Unit, onBack: () -> Unit
 ) {
-    val name = user.optString("name").ifBlank { "User account" }
-    val expiry = user.optLong("expiry")
-    val expiryText = if (expiry <= 0L) "No expiry set" else DateFormat.getDateTimeInstance().format(
-        Date(if (expiry > 1_000_000_000_000L) expiry else expiry * 1000L))
+    // Read fields defensively so malformed or unexpected server values cannot crash this screen.
+    val name = runCatching { user.optString("name").takeUnless { it == "null" }?.takeIf { it.isNotBlank() } }
+        .getOrNull() ?: "User account"
+    val email = runCatching { user.optString("email").takeUnless { it == "null" }?.takeIf { it.isNotBlank() } }
+        .getOrNull() ?: "No email address"
+    val userId = runCatching { user.optString("id").takeUnless { it == "null" }.orEmpty() }.getOrDefault("")
+    val isAdmin = runCatching { user.optBoolean("admin") }.getOrDefault(false)
+    val isDisabled = runCatching { user.optBoolean("disabled") }.getOrDefault(false)
+    val expiryText = runCatching {
+        val expiry = user.optLong("expiry")
+        if (expiry <= 0L) "No expiry set" else DateFormat.getDateTimeInstance().format(
+            Date(if (expiry > 1_000_000_000_000L) expiry else expiry * 1000L))
+    }.getOrDefault("Unavailable")
+    val labels = runCatching { user.opt("labels")?.toString()?.takeUnless { it == "null" }.orEmpty() }
+        .getOrDefault("")
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
@@ -1914,20 +1925,20 @@ private fun UserDetailsPage(
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             JCard {
                 Text(name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(user.optString("email").ifBlank { "No email address" }, color = Dim, fontSize = 11.sp)
+                Text(email, color = Dim, fontSize = 11.sp)
                 Spacer(Modifier.height(8.dp))
-                Pill(if (user.optBoolean("admin")) "ADMIN" else if (user.optBoolean("disabled")) "DISABLED" else "ACTIVE",
-                    if (user.optBoolean("disabled")) Color(0xFFFF8A8A) else Green)
+                Pill(if (isAdmin) "ADMIN" else if (isDisabled) "DISABLED" else "ACTIVE",
+                    if (isDisabled) Color(0xFFFF8A8A) else Green)
             }
             JCard {
                 Text("Account information", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 listOf(
-                    "User ID" to user.optString("id"),
-                    "Email" to user.optString("email"),
-                    "Role" to if (user.optBoolean("admin")) "Administrator" else "Standard user",
-                    "Status" to if (user.optBoolean("disabled")) "Disabled" else "Enabled",
+                    "User ID" to userId,
+                    "Email" to email,
+                    "Role" to if (isAdmin) "Administrator" else "Standard user",
+                    "Status" to if (isDisabled) "Disabled" else "Enabled",
                     "Expiry" to expiryText,
-                    "Labels" to user.opt("labels").toString().takeIf { it != "null" }.orEmpty()
+                    "Labels" to labels
                 ).forEach { (label, value) ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(label, color = Dim, fontSize = 10.sp)
@@ -1936,20 +1947,11 @@ private fun UserDetailsPage(
                     HorizontalDivider(color = Line)
                 }
             }
-            JCard {
-                Text("Additional server fields", color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                user.keys().asSequence().sorted().forEach { key ->
-                    val value = user.opt(key)?.toString().orEmpty()
-                    if (value.isNotBlank() && value != "null" && key !in setOf("password", "token", "access_token")) {
-                        Text("${key.replace('_', ' ')}: ${value.take(240)}", color = Dim, fontSize = 9.sp)
-                    }
-                }
-            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(modifier = Modifier.weight(1f), onClick = onReset) { Text("Reset password") }
-            Button(modifier = Modifier.weight(1f), onClick = { onToggle(user.optBoolean("disabled")) }) {
-                Text(if (user.optBoolean("disabled")) "Enable account" else "Disable account")
+            Button(modifier = Modifier.weight(1f), onClick = { onToggle(isDisabled) }) {
+                Text(if (isDisabled) "Enable account" else "Disable account")
             }
         }
     }
