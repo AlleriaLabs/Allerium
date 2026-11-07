@@ -23,8 +23,8 @@ android {
         applicationId = "app.jfago"
         minSdk = 24
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.0.1"
+        versionCode = 9
+        versionName = "1.0.2"
     }
 
     signingConfigs {
