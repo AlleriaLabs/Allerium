@@ -310,7 +310,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     fun save(l: List<Srv>) { servers = l; prefs.edit().putString("servers", JSONArray(l.map {
         JSONObject().put("name", it.name).put("url", it.url).put("user", it.user) }).toString()).apply() }
     var session by remember { mutableStateOf<Pair<Srv, Api>?>(null) }
-    session?.let { (s, api) -> Home(s, api) { session = null }; return }
+    session?.let { (s, api) -> Home(s, api, servers, ::save) { session = null }; return }
     ServerList(servers, ::save) { s, a -> session = s to a }
 }
 
@@ -424,7 +424,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     LaunchedEffect(servers) { servers.forEach { s -> launch(Dispatchers.IO) {
         online[s.url] = try { (URL(s.url).openConnection() as HttpURLConnection).run { connectTimeout = 4000; readTimeout = 4000; responseCode; true } } catch (e: Exception) { false } } } }
     Box(Modifier.fillMaxSize()) {
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 88.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 88.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Header("Your secure JFA-GO workspace") {
                 Box {
@@ -591,7 +591,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     }
 }
 
-@Composable fun Home(s: Srv, api: Api, back: () -> Unit) {
+@Composable fun Home(s: Srv, api: Api, servers: List<Srv>, saveServers: (List<Srv>) -> Unit, back: () -> Unit) {
     BackHandler(onBack = back)
     var tab by remember { mutableIntStateOf(0) }
     var users by remember { mutableStateOf(listOf<JSONObject>()) }
@@ -611,6 +611,8 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     var diagnosticChecks by remember { mutableStateOf<List<DiagnosticCheck>>(emptyList()) }
     var diagnosticBusy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
+    var backupMenuExpanded by remember { mutableStateOf(false) }
+    var backupMessage by remember { mutableStateOf("") }
     var dlg by remember { mutableStateOf("") }; var target by remember { mutableStateOf<JSONObject?>(null) }
     var resetLink by remember { mutableStateOf("") }
     var resetMessage by remember { mutableStateOf("") }
@@ -618,7 +620,77 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     val scope = rememberCoroutineScope(); val ctx = LocalContext.current
     fun refresh() = scope.launch { try { withContext(Dispatchers.IO) { users = api.users(); invites = api.invites(); acts = try { api.activity() } catch (e: Exception) { acts }; profs = try { api.profiles() } catch (e: Exception) { profs } }; msg = "" } catch (e: Exception) { msg = e.message ?: "Error" } }
     fun act(b: () -> Unit) = scope.launch { try { withContext(Dispatchers.IO) { b() } } catch (e: Exception) { msg = e.message ?: "Error" }; refresh() }
+    fun exportServerBackup(uri: android.net.Uri?) {
+        if (uri == null) return
+        try {
+            val backup = JSONObject()
+                .put("format", "allerium-server-backup")
+                .put("version", 1)
+                .put("createdAt", System.currentTimeMillis())
+                .put("servers", JSONArray(servers.map { server ->
+                    JSONObject().put("name", server.name).put("url", server.url).put("user", server.user)
+                }))
+            val stream = ctx.contentResolver.openOutputStream(uri)
+                ?: throw IllegalStateException("Could not open the selected backup destination.")
+            stream.use { it.write(backup.toString(2).toByteArray(Charsets.UTF_8)) }
+            backupMessage = "Backup saved. ${servers.size} server profile(s) exported. Passwords and biometric settings were not included."
+        } catch (e: Exception) {
+            backupMessage = "Backup failed: ${e.message ?: "Unable to write file"}"
+        }
+    }
+    fun importServerBackup(uri: android.net.Uri?) {
+        if (uri == null) return
+        try {
+            val stream = ctx.contentResolver.openInputStream(uri)
+                ?: throw IllegalStateException("Could not read the selected backup file.")
+            val backup = JSONObject(stream.bufferedReader(Charsets.UTF_8).use { it.readText() })
+            require(backup.optString("format") == "allerium-server-backup") { "This is not an Allerium server backup." }
+            require(backup.optInt("version", -1) == 1) { "This backup version is not supported." }
+            val saved = backup.optJSONArray("servers") ?: throw IllegalArgumentException("The backup has no server list.")
+            val merged = servers.toMutableList()
+            var added = 0
+            for (i in 0 until saved.length()) {
+                val item = saved.optJSONObject(i) ?: continue
+                val name = item.optString("name").trim()
+                val url = item.optString("url").trim().trimEnd('/')
+                val user = item.optString("user").trim()
+                if (name.isBlank() || url.isBlank() || user.isBlank()) continue
+                if (merged.any { it.url.equals(url, ignoreCase = true) }) continue
+                merged.add(Srv(name, url, user))
+                added++
+            }
+            if (added > 0) saveServers(merged)
+            backupMessage = "Restore complete. Added $added server profile(s); existing profiles were kept. Sign in again on restored servers. Passwords and biometric settings must be set up on this device."
+        } catch (e: Exception) {
+            backupMessage = "Restore failed: ${e.message ?: "Invalid backup file"}"
+        }
+    }
+    fun launchBackupExport() {
+        try {
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("application/json").putExtra(Intent.EXTRA_TITLE, "Allerium-server-backup.json")
+            (fragmentActivity(ctx) as? MainActivity)?.launchFilePicker(4101, intent, ::exportServerBackup)
+                ?: throw IllegalStateException("Main activity is unavailable.")
+        } catch (e: Exception) {
+            backupMessage = "Could not open Android save picker: " + (e.message ?: e.javaClass.simpleName)
+        }
+    }
+    fun launchBackupImport() {
+        try {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+            (fragmentActivity(ctx) as? MainActivity)?.launchFilePicker(4102, intent, ::importServerBackup)
+                ?: throw IllegalStateException("Main activity is unavailable.")
+        } catch (e: Exception) {
+            backupMessage = "Could not open Android file picker: " + (e.message ?: e.javaClass.simpleName)
+        }
+    }
     LaunchedEffect(Unit) { refresh() }
+    if (backupMessage.isNotBlank()) {
+        AlertDialog(onDismissRequest = { backupMessage = "" }, containerColor = CardC,
+            title = { Text("Server backup", color = Color.White) },
+            text = { Text(backupMessage, color = Dim, fontSize = 12.sp) },
+            confirmButton = { TextButton(onClick = { backupMessage = "" }) { Text("Done", color = Red) } })
+    }
     val off = users.count { it.optBoolean("disabled") }
     val shown = users.filter { u ->
         val queryMatch = q.isBlank() || u.optString("name").contains(q, true) || u.optString("email").contains(q, true)
@@ -656,8 +728,29 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     }
 
     Box(Modifier.fillMaxSize()) {
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp).padding(bottom = 154.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { Header(s.name) }
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 142.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item {
+            Header(s.name) {
+                Box {
+                    IconButton(onClick = { backupMenuExpanded = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Server options", tint = Dim)
+                    }
+                    DropdownMenu(expanded = backupMenuExpanded, onDismissRequest = { backupMenuExpanded = false },
+                        modifier = Modifier.background(CardC)) {
+                        DropdownMenuItem(
+                            text = { Text("Create server backup", color = Color.White) },
+                            leadingIcon = { Icon(Icons.Default.FileDownload, null, tint = Cyan) },
+                            onClick = { backupMenuExpanded = false; launchBackupExport() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Restore server backup", color = Color.White) },
+                            leadingIcon = { Icon(Icons.Default.Restore, null, tint = Cyan) },
+                            onClick = { backupMenuExpanded = false; launchBackupImport() }
+                        )
+                    }
+                }
+            }
+        }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StatCard("TOTAL USERS", users.size, Red, Icons.Default.Groups, Modifier.weight(1f))
