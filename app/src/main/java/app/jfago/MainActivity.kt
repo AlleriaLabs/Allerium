@@ -528,7 +528,13 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             FilterChip(selected = favoritesOnly, onClick = { favoritesOnly = true }, label = { Text("Favorites") })
         }
     }
-    items(servers.filter { !favoritesOnly || it.url in favoriteUrls }, key = { it.url }) { s ->
+    servers.filter { !favoritesOnly || it.url in favoriteUrls }
+        .groupBy { it.group.ifBlank { "Ungrouped" } }.toSortedMap().forEach { (groupName, groupServers) ->
+        item {
+            Text(groupName, color = Cyan, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp, start = 4.dp))
+        }
+    items(groupServers, key = { it.url }) { s ->
             AnimatedVisibility(visible = true, enter = fadeIn(tween(320)) + slideInVertically(tween(320)) { it / 5 }) {
             AnimatedServerCard(Modifier.clickable(enabled = !authenticating) { selectServer(s) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -569,6 +575,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             }
             }
         }
+    }
     }
     Row(Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 24.dp)
         .clip(RoundedCornerShape(50)).background(Red)
