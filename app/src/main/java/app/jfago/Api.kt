@@ -202,6 +202,30 @@ class Api(server: String) {
         call("DELETE", "/profiles/jellyseerr/$p")
     }
 
+    fun applyProfileToUsers(ids: List<String>, profile: String) {
+        require(ids.isNotEmpty()) { "Select at least one user." }
+        call("POST", "/users/settings", JSONObject()
+            .put("from", "profile").put("profile", profile).put("apply_to", JSONArray(ids))
+            .put("configuration", true).put("homescreen", true).put("ombi", true).put("jellyseerr", true))
+    }
+
+    fun enableReferrals(ids: List<String>, profile: String, useExpiry: Boolean = false) {
+        require(ids.isNotEmpty()) { "Select at least one user." }
+        val p = URLEncoder.encode(profile, "UTF-8").replace("+", "%20")
+        call("POST", "/users/referral/profile/$p/${if (useExpiry) "with-expiry" else "none"}",
+            JSONObject().put("users", JSONArray(ids)))
+    }
+
+    fun disableReferrals(ids: List<String>) {
+        require(ids.isNotEmpty()) { "Select at least one user." }
+        call("DELETE", "/users/referral", JSONObject().put("users", JSONArray(ids)))
+    }
+
+    fun announcementTemplate(name: String): JSONObject {
+        val n = URLEncoder.encode(name, "UTF-8").replace("+", "%20")
+        return JSONObject(call("GET", "/users/announce/template/$n"))
+    }
+
     fun rawProfile(profile: String): JSONObject {
         val p = URLEncoder.encode(profile, "UTF-8").replace("+", "%20")
         return JSONObject(call("GET", "/profiles/raw/$p"))
