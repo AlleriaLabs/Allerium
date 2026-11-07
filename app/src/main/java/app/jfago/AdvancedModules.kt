@@ -388,6 +388,7 @@ fun AdvancedModulesPage(
                     Text(feedback, color = if (feedback.contains("failed", true) || feedback.contains("error", true)) Color(0xFFFF8585) else Cyan, fontSize = 10.sp)
                 }
             }
+    }
 
     if (confirmDelete) {
         AlertDialog(
