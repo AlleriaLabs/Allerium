@@ -666,7 +666,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             containerColor = CardC,
             title = { Text("Reset ${u.optString("name")}'s password?", color = Color.White) },
             text = { Text(
-                "Allerium will ask JFA-GO to generate an administrator-initiated reset link. If the account has a delivery method, JFA-GO can send the instructions. Otherwise, you can copy and share the link manually. The link expires after 30 minutes.",
+                "Allerium will ask JFA-GO to generate an administrator-initiated reset link. If the account has a delivery method, JFA-GO can send the instructions. Otherwise, you can copy and share the link manually. The link expires after 30 minutes. JFA-GO's Password Resets > Link reset option must be enabled for the link to open.",
                 color = Dim, fontSize = 12.sp
             ) },
             confirmButton = {
