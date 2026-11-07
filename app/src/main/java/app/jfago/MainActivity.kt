@@ -2,6 +2,7 @@ package app.jfago
 
 import android.content.*
 import android.os.Bundle
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -54,6 +55,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.io.PrintWriter
+import java.io.StringWriter
 import java.text.DateFormat
 import java.util.Date
 
@@ -69,6 +72,7 @@ val PillC = Color(0xFF1C2740)
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        installCrashDiagnostics()
         super.onCreate(savedInstanceState)
         window.statusBarColor = Bg.toArgb(); window.navigationBarColor = Bg.toArgb()
         val cs = darkColorScheme(primary = Red, background = Bg, surface = Bg, onSurface = Color.White,
@@ -78,6 +82,40 @@ class MainActivity : FragmentActivity() {
 }
 
 data class Srv(val name: String, val url: String, val user: String)
+
+private fun installCrashDiagnostics() {
+    val app = this
+    val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+    Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+        try {
+            val trace = StringWriter().also { writer ->
+                error.printStackTrace(PrintWriter(writer))
+            }.toString()
+            val packageInfo = if (Build.VERSION.SDK_INT >= 33) {
+                packageManager.getPackageInfo(packageName, android.content.pm.PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(packageName, 0)
+            }
+            val version = packageInfo.versionName ?: "unknown"
+            val report = buildString {
+                appendLine("Allerium crash report")
+                appendLine("Time: ${DateFormat.getDateTimeInstance().format(Date())}")
+                appendLine("App: $version (${packageInfo.longVersionCode})")
+                appendLine("Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+                appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+                appendLine("Thread: ${thread.name}")
+                appendLine()
+                append(trace)
+            }
+            app.getSharedPreferences("allerium_diagnostics", Context.MODE_PRIVATE)
+                .edit().putString("last_crash", report).putLong("last_crash_at", System.currentTimeMillis()).commit()
+        } catch (_: Exception) {
+            // Never let diagnostic persistence interfere with the original crash handler.
+        }
+        previousHandler?.uncaughtException(thread, error)
+    }
+}
 
 private fun fragmentActivity(context: Context): FragmentActivity? {
     var current = context
@@ -869,6 +907,38 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                             "HTTPS transport configured" else "HTTP connection · HTTPS is recommended",
                             color = if (s.url.trim().startsWith("https://", true)) Green else Color(0xFFFFC36B),
                             fontSize = 10.sp)
+                    }
+                }
+                val lastCrashReport = ctx.getSharedPreferences("allerium_diagnostics", Context.MODE_PRIVATE)
+                    .getString("last_crash", null)
+                JCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.BugReport, null, tint = Cyan, modifier = Modifier.size(19.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("App crash diagnostics", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(if (lastCrashReport.isNullOrBlank()) "No crash report has been captured on this install."
+                                else "A crash report is saved from the most recent app crash.", color = Dim, fontSize = 10.sp)
+                        }
+                    }
+                    if (!lastCrashReport.isNullOrBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        SelectionContainer {
+                            Text(lastCrashReport.take(12000), color = Dim, fontSize = 9.sp,
+                                modifier = Modifier.heightIn(max = 120.dp).verticalScroll(rememberScrollState()))
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = {
+                                (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                                    .setPrimaryClip(ClipData.newPlainText("Allerium crash report", lastCrashReport))
+                                msg = "Crash report copied to clipboard."
+                            }) { Text("Copy report", color = Cyan) }
+                            TextButton(onClick = {
+                                ctx.getSharedPreferences("allerium_diagnostics", Context.MODE_PRIVATE)
+                                    .edit().remove("last_crash").remove("last_crash_at").apply()
+                                msg = "Saved crash report cleared."
+                            }) { Text("Clear", color = Dim) }
+                        }
                     }
                 }
                 if (diagnosticChecks.isEmpty() && !diagnosticBusy) {
