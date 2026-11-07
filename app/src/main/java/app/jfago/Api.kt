@@ -5,6 +5,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.io.InputStream
+import java.io.OutputStream
 import java.net.URLEncoder
 
 class Api(server: String) {
@@ -184,6 +186,51 @@ class Api(server: String) {
     fun restoreServerBackup(filename: String) {
         val safe = URLEncoder.encode(filename, "UTF-8").replace("+", "%20")
         call("POST", "/backups/restore/$safe")
+    }
+
+    fun downloadServerBackup(filename: String, output: OutputStream) {
+        val safe = URLEncoder.encode(filename, "UTF-8").replace("+", "%20")
+        val c = URL(base + "/backups/$safe").openConnection() as HttpURLConnection
+        c.requestMethod = "GET"
+        c.connectTimeout = 15000
+        c.readTimeout = 60000
+        c.setRequestProperty("Authorization", "Bearer $token")
+        val code = c.responseCode
+        if (code >= 400) {
+            val error = c.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            throw IllegalStateException("Backup download failed: HTTP $code ${error.take(180)}")
+        }
+        c.inputStream.use { it.copyTo(output) }
+        c.disconnect()
+    }
+
+    fun uploadServerBackup(filename: String, input: InputStream) {
+        val boundary = "----AlleriumBackup${System.currentTimeMillis()}"
+        val c = URL(base + "/backups/restore").openConnection() as HttpURLConnection
+        c.requestMethod = "POST"
+        c.connectTimeout = 15000
+        c.readTimeout = 60000
+        c.doOutput = true
+        c.setRequestProperty("Authorization", "Bearer $token")
+        c.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+        c.outputStream.use { out ->
+            out.write("--$boundary\\r\\n".toByteArray())
+            out.write("Content-Disposition: form-data; name=\\"backups-file\\"; filename=\\"$filename\\"\\r\\n".toByteArray())
+            out.write("Content-Type: application/octet-stream\\r\\n\\r\\n".toByteArray())
+            input.copyTo(out)
+            out.write("\\r\\n--$boundary--\\r\\n".toByteArray())
+        }
+        try {
+            val code = c.responseCode
+            if (code >= 400) {
+                val error = c.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                throw IllegalStateException("Backup restore upload failed: HTTP $code ${error.take(180)}")
+            }
+        } catch (e: Exception) {
+            throw IllegalStateException("Backup was uploaded, but JFA-GO may have restarted before confirming the response. Reconnect and check the server before retrying.", e)
+        } finally {
+            c.disconnect()
+        }
     }
 
     fun jellyseerrUsers(): List<JSONObject> {
