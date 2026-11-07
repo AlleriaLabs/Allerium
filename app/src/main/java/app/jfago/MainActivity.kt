@@ -635,6 +635,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         notificationPrefs.edit().putStringSet("read_${s.url}", readNotificationIds).apply()
     }
     var advancedModulesOpen by remember { mutableStateOf(false) }
+    var workspacePage by remember { mutableStateOf("") }
     var diagnosticChecks by remember { mutableStateOf<List<DiagnosticCheck>>(emptyList()) }
     var diagnosticBusy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
@@ -831,6 +832,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     }
 
     Box(Modifier.fillMaxSize()) {
+    if (workspacePage.isEmpty()) {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 142.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Header(s.name) {
@@ -843,27 +845,27 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                         DropdownMenuItem(
                             text = { Text(if (unreadNotificationCount > 0) "Alerts · $unreadNotificationCount new" else "Alerts", color = Color.White) },
                             leadingIcon = { Icon(Icons.Default.Notifications, null, tint = Cyan) },
-                            onClick = { backupMenuExpanded = false; featureDialog = "notifications" }
+                            onClick = { backupMenuExpanded = false; workspacePage = "notifications" }
                         )
                         DropdownMenuItem(
                             text = { Text("Diagnostics", color = Color.White) },
                             leadingIcon = { Icon(Icons.Default.Speed, null, tint = Cyan) },
-                            onClick = { backupMenuExpanded = false; featureDialog = "diagnostics"; diagnosticChecks = emptyList() }
+                            onClick = { backupMenuExpanded = false; workspacePage = "diagnostics"; diagnosticChecks = emptyList() }
                         )
                         DropdownMenuItem(
                             text = { Text("Operations center", color = Color.White) },
                             leadingIcon = { Icon(Icons.Default.Analytics, null, tint = Cyan) },
-                            onClick = { backupMenuExpanded = false; featureDialog = "operations" }
+                            onClick = { backupMenuExpanded = false; workspacePage = "operations" }
                         )
                         DropdownMenuItem(
                             text = { Text("Export workspace data", color = Color.White) },
                             leadingIcon = { Icon(Icons.Default.FileDownload, null, tint = Cyan) },
-                            onClick = { backupMenuExpanded = false; featureDialog = "export" }
+                            onClick = { backupMenuExpanded = false; workspacePage = "export" }
                         )
                         DropdownMenuItem(
                             text = { Text("All tools", color = Color.White) },
                             leadingIcon = { Icon(Icons.Default.Tune, null, tint = Cyan) },
-                            onClick = { backupMenuExpanded = false; advancedModulesOpen = true }
+                            onClick = { backupMenuExpanded = false; workspacePage = "tools" }
                         )
                         HorizontalDivider(color = Line)
                         DropdownMenuItem(
@@ -1201,263 +1203,25 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     }
     }
 
-    if (advancedModulesOpen) {
-        AdvancedModulesDialog(
-            api = api,
-            users = users,
-            invites = invites,
-            profiles = profs,
-            onClose = { advancedModulesOpen = false },
-            onRefresh = { refresh() },
-            onMessage = { msg = it }
-        )
-    }
-    if (featureDialog == "notifications") {
-        val visibleAlerts = centerAlerts.filter {
-            notificationFilter == "All" || it.category == notificationFilter
-        }
-        AlertDialog(
-            onDismissRequest = { featureDialog = "" },
-            containerColor = CardC,
-            title = {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Notification center", color = Color.White, modifier = Modifier.weight(1f))
-                        if (unreadNotificationCount > 0) {
-                            Text("$unreadNotificationCount new", color = Cyan, fontSize = 10.sp)
-                        }
-                    }
-                    Text("Account alerts and recent server activity", color = Dim, fontSize = 10.sp)
-                }
-            },
-            text = {
-                Column(
-                    Modifier.fillMaxWidth().heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("All", "Accounts", "Activity").forEach { filter ->
-                            FilterChip(
-                                selected = notificationFilter == filter,
-                                onClick = { notificationFilter = filter },
-                                label = { Text(filter, fontSize = 10.sp) }
-                            )
-                        }
-                        Spacer(Modifier.weight(1f))
-                        TextButton(
-                            enabled = visibleAlerts.any { it.id !in readNotificationIds },
-                            onClick = { markAllNotificationsRead(visibleAlerts.map { it.id }) },
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
-                        ) { Text("Mark read", color = Cyan, fontSize = 9.sp) }
-                    }
-                    if (visibleAlerts.isEmpty()) {
-                        Column(
-                            Modifier.fillMaxWidth().padding(vertical = 28.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(Icons.Default.NotificationsNone, null, tint = Dim, modifier = Modifier.size(30.dp))
-                            Spacer(Modifier.height(8.dp))
-                            Text("You're all caught up", color = Color.White, fontSize = 13.sp)
-                            Text("No matching alerts or recent activity.", color = Dim, fontSize = 10.sp)
-                        }
-                    } else {
-                        visibleAlerts.forEach { alert ->
-                            val unread = alert.id !in readNotificationIds
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .clip(RoundedCornerShape(13.dp))
-                                    .background(if (unread) PillC else Color.Transparent)
-                                    .clickable { markNotificationRead(alert.id) }
-                                    .padding(11.dp),
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                Box(
-                                    Modifier.size(32.dp).clip(CircleShape)
-                                        .background(if (alert.warning) Color(0x33FFB547) else Color(0x2239D5F2)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        if (alert.category == "Activity") Icons.Default.History
-                                        else Icons.Default.Schedule,
-                                        null,
-                                        tint = if (alert.warning) Color(0xFFFFB547) else Cyan,
-                                        modifier = Modifier.size(17.dp)
-                                    )
-                                }
-                                Spacer(Modifier.width(10.dp))
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            alert.title,
-                                            color = Color.White,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 11.sp,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        if (unread) Box(Modifier.size(6.dp).clip(CircleShape).background(Cyan))
-                                    }
-                                    Text(alert.detail, color = Dim, fontSize = 10.sp)
-                                    Text(
-                                        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
-                                            .format(Date(alert.timestamp)),
-                                        color = Dim.copy(alpha = .72f),
-                                        fontSize = 9.sp
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton({ featureDialog = "" }) { Text("Done", color = Red) } }
-        )
-    }
-    if (featureDialog == "diagnostics") {
-        val passedChecks = diagnosticChecks.count { it.passed }
-        AlertDialog(onDismissRequest = { if (!diagnosticBusy) featureDialog = "" }, containerColor = CardC,
-            title = { Text("Server diagnostics", color = Color.White) },
-            text = { Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Column {
-                    Text(s.name, color = Color.White, fontWeight = FontWeight.SemiBold)
-                    Text(s.url, color = Dim, fontSize = 10.sp)
-                    Spacer(Modifier.height(5.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(if (s.url.trim().startsWith("https://", true)) Icons.Default.Lock else Icons.Default.Warning,
-                            null, tint = if (s.url.trim().startsWith("https://", true)) Green else Color(0xFFFFC36B),
-                            modifier = Modifier.size(15.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (s.url.trim().startsWith("https://", true))
-                            "HTTPS transport configured" else "HTTP connection · HTTPS is recommended",
-                            color = if (s.url.trim().startsWith("https://", true)) Green else Color(0xFFFFC36B),
-                            fontSize = 10.sp)
-                    }
-                }
-                val lastCrashReport = ctx.getSharedPreferences("allerium_diagnostics", Context.MODE_PRIVATE)
-                    .getString("last_crash", null)
-                JCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.BugReport, null, tint = Cyan, modifier = Modifier.size(19.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("App crash diagnostics", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            Text(if (lastCrashReport.isNullOrBlank()) "No crash report has been captured on this install."
-                                else "A crash report is saved from the most recent app crash.", color = Dim, fontSize = 10.sp)
-                        }
-                    }
-                    if (!lastCrashReport.isNullOrBlank()) {
-                        Spacer(Modifier.height(8.dp))
-                        SelectionContainer {
-                            Text(lastCrashReport.take(12000), color = Dim, fontSize = 9.sp,
-                                modifier = Modifier.heightIn(max = 120.dp).verticalScroll(rememberScrollState()))
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = {
-                                (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
-                                    .setPrimaryClip(ClipData.newPlainText("Allerium crash report", lastCrashReport))
-                                msg = "Crash report copied to clipboard."
-                            }) { Text("Copy report", color = Cyan) }
-                            TextButton(onClick = {
-                                ctx.getSharedPreferences("allerium_diagnostics", Context.MODE_PRIVATE)
-                                    .edit().remove("last_crash").remove("last_crash_at").apply()
-                                msg = "Saved crash report cleared."
-                            }) { Text("Clear", color = Dim) }
-                        }
-                    }
-                }
-                if (diagnosticChecks.isEmpty() && !diagnosticBusy) {
-                    Text("Run a diagnostic to check authenticated JFA-GO endpoints and response times.",
-                        color = Dim, fontSize = 11.sp)
-                }
-                if (diagnosticBusy) {
-                    LinearProgressIndicator(Modifier.fillMaxWidth(), color = Cyan)
-                    Text("Checking server endpoints…", color = Cyan, fontSize = 11.sp)
-                }
-                if (diagnosticChecks.isNotEmpty()) {
-                    val allPassed = passedChecks == diagnosticChecks.size
-                    JCard {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(if (allPassed) Icons.Default.CheckCircle else Icons.Default.ErrorOutline,
-                                null, tint = if (allPassed) Green else Color(0xFFFFC36B))
-                            Spacer(Modifier.width(8.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(if (allPassed) "All checks passed" else "Some checks need attention",
-                                    color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                                Text("$passedChecks of ${diagnosticChecks.size} endpoints responding",
-                                    color = Dim, fontSize = 10.sp)
-                            }
-                        }
-                    }
-                    diagnosticChecks.forEach { check ->
-                        Row(Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                            verticalAlignment = Alignment.Top) {
-                            Icon(if (check.passed) Icons.Default.CheckCircle else Icons.Default.Cancel,
-                                null, tint = if (check.passed) Green else Color(0xFFFF8585),
-                                modifier = Modifier.size(17.dp))
-                            Spacer(Modifier.width(9.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(check.label, color = Color.White, fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold)
-                                Text(check.detail, color = Dim, fontSize = 10.sp)
-                            }
-                            Text("${check.durationMs} ms", color = Cyan, fontSize = 9.sp)
-                        }
-                        Divider(color = Line)
-                    }
-                    Text("Response times measure each authenticated API request from this device. This does not measure CPU, memory, or disk usage.",
-                        color = Dim, fontSize = 9.sp)
-                }
-            } },
-            confirmButton = { TextButton(enabled = !diagnosticBusy, onClick = {
+    } else {
+        when (workspacePage) {
+            "operations" -> OperationsCenterPage(api, s, users, invites, acts, onClose = { workspacePage = "" }, onLogout = { workspacePage = ""; back() })
+            "tools" -> AdvancedModulesPage(api, users, invites, profs, onClose = { workspacePage = "" }, onRefresh = { refresh() }, onMessage = { msg = it })
+            "notifications" -> NotificationCenterPage(centerAlerts, readNotificationIds, notificationFilter,
+                onFilter = { notificationFilter = it }, onRead = { markNotificationRead(it) },
+                onReadAll = { markAllNotificationsRead(it) }, onBack = { workspacePage = "" })
+            "diagnostics" -> DiagnosticsPage(diagnosticChecks, diagnosticBusy, onRun = {
                 diagnosticBusy = true
                 scope.launch {
-                    diagnosticChecks = withContext(Dispatchers.IO) { api.diagnostics() }
-                    diagnosticBusy = false
+                    try { diagnosticChecks = withContext(Dispatchers.IO) { api.diagnostics() } }
+                    catch (e: Exception) { msg = e.message ?: "Diagnostics failed." }
+                    finally { diagnosticBusy = false }
                 }
-            }) { Text(if (diagnosticChecks.isEmpty()) "Run diagnostics" else "Run again", color = Red) } },
-            dismissButton = { TextButton(enabled = !diagnosticBusy, onClick = { featureDialog = "" }) { Text("Close") } })
+            }, onBack = { workspacePage = "" })
+            "export" -> ExportWorkspacePage(users, acts, ctx, onBack = { workspacePage = "" })
+        }
     }
-    if (featureDialog == "operations") {
-        OperationsCenterDialog(
-            api = api,
-            server = s,
-            users = users,
-            invites = invites,
-            activities = acts,
-            onClose = { featureDialog = "" },
-            onLogout = { featureDialog = ""; back() }
-        )
-    }
-    if (featureDialog == "export") {
-        AlertDialog(onDismissRequest = { featureDialog = "" }, containerColor = CardC,
-            title = { Text("Export workspace data", color = Color.White) },
-            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Share CSV files for users and activity. Passwords and saved credentials are never exported.", color = Dim, fontSize = 11.sp)
-                RedBtn("Export users · CSV", icon = Icons.Default.People) {
-                    val csv = buildString {
-                        append("username,email,admin,disabled,expiry\n")
-                        users.forEach { u ->
-                            val values = listOf(u.optString("name"), u.optString("email"), u.optBoolean("admin").toString(), u.optBoolean("disabled").toString(), u.optLong("expiry").toString())
-                            append(values.joinToString(",") { value -> "\"" + value.replace("\"", "\"\"") + "\"" })
-                            append('\n')
-                        }
-                    }
-                    shareCsv(ctx, "Allerium users.csv", csv)
-                }
-                RedBtn("Export activity · CSV", icon = Icons.Default.History) {
-                    val csv = buildString {
-                        append("time,type,username,details\n")
-                        acts.forEach { a ->
-                            val values = listOf(a.optLong("time").toString(), a.optString("type"), a.optString("username"), a.optString("message").ifBlank { a.optString("description") })
-                            append(values.joinToString(",") { value -> "\"" + value.replace("\"", "\"\"") + "\"" })
-                            append('\n')
-                        }
-                    }
-                    shareCsv(ctx, "Allerium activity.csv", csv)
-                }
-            } },
-            confirmButton = { TextButton({ featureDialog = "" }) { Text("Done", color = Red) } })
-    }
+
 
     val close = { dlg = ""; target = null }
     if (dlg == "reset-confirm") target?.let { u ->
@@ -1535,5 +1299,104 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             text = { Column { Field(n, { n = it }, "Username"); Field(p, { p = it }, "Password", true); Field(e, { e = it }, "Email (optional)"); Chips(profs, pf) { pf = it } } },
             confirmButton = { TextButton({ close(); act { api.createUser(n, p, e, pf) } }) { Text("Create", color = Red) } },
             dismissButton = { TextButton(close) { Text("Cancel") } })
+    }
+}
+
+@Composable
+private fun NotificationCenterPage(
+    alerts: List<CenterAlert>, readIds: Set<String>, filter: String,
+    onFilter: (String) -> Unit, onRead: (String) -> Unit, onReadAll: (List<String>) -> Unit, onBack: () -> Unit
+) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
+            Column { Text("Notification Center", color = Color.White, fontSize = 21.sp); Text("Account alerts and recent activity", color = Dim, fontSize = 10.sp) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("All", "Accounts", "Activity").forEach { value ->
+                FilterChip(selected = filter == value, onClick = { onFilter(value) }, label = { Text(value) })
+            }
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { onReadAll(alerts.filter { filter == "All" || it.category == filter }.map { it.id }) }) { Text("Mark all read", color = Cyan) }
+        }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val shown = alerts.filter { filter == "All" || it.category == filter }
+            if (shown.isEmpty()) Text("You're all caught up.", color = Dim, modifier = Modifier.padding(20.dp))
+            shown.forEach { alert ->
+                JCard(Modifier.clickable { onRead(alert.id) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(if (alert.warning) Icons.Default.WarningAmber else Icons.Default.Notifications, null, tint = if (alert.warning) Color(0xFFFFC36B) else Cyan)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(alert.title, color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text(alert.detail, color = Dim, fontSize = 10.sp)
+                            Text(DateFormat.getDateTimeInstance().format(Date(alert.timestamp)), color = Dim, fontSize = 9.sp)
+                        }
+                        if (alert.id !in readIds) Box(Modifier.size(8.dp).clip(CircleShape).background(Cyan))
+                    }
+                }
+            }
+        }
+    }
+}
+@Composable
+private fun DiagnosticsPage(checks: List<DiagnosticCheck>, busy: Boolean, onRun: () -> Unit, onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
+            Column { Text("Server Diagnostics", color = Color.White, fontSize = 21.sp); Text("Authenticated API endpoint checks", color = Dim, fontSize = 10.sp) }
+        }
+        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Cyan)
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            checks.forEach { check ->
+                JCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(if (check.passed) Icons.Default.CheckCircle else Icons.Default.ErrorOutline, null, tint = if (check.passed) Green else Color(0xFFFF8585))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) { Text(check.label, color = Color.White, fontWeight = FontWeight.SemiBold); Text(check.detail, color = Dim, fontSize = 10.sp) }
+                        Text("${check.durationMs} ms", color = Cyan, fontSize = 10.sp)
+                    }
+                }
+            }
+            if (checks.isEmpty() && !busy) Text("Run diagnostics to check authenticated JFA-GO endpoints.", color = Dim)
+        }
+        RedBtn(if (busy) "Checking…" else if (checks.isEmpty()) "Run diagnostics" else "Run again", enabled = !busy, icon = Icons.Default.Speed, on = onRun)
+    }
+}
+@Composable
+private fun ExportWorkspacePage(users: List<JSONObject>, acts: List<JSONObject>, context: Context, onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back", tint = Cyan) }
+            Column { Text("Export Workspace Data", color = Color.White, fontSize = 21.sp); Text("Download server data as CSV", color = Dim, fontSize = 10.sp) }
+        }
+        JCard {
+            Text("Users", color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text("${users.size} accounts · usernames, email, roles and expiry", color = Dim, fontSize = 10.sp)
+            RedBtn("Export users · CSV", icon = Icons.Default.People) {
+                val csv = buildString {
+                    append("username,email,admin,disabled,expiry\\n")
+                    users.forEach { u ->
+                        val values = listOf(u.optString("name"), u.optString("email"), u.optBoolean("admin").toString(), u.optBoolean("disabled").toString(), u.optLong("expiry").toString())
+                        append(values.joinToString(",") { "\"" + it.replace("\"", "\"\"") + "\"" }); append('\\n')
+                    }
+                }
+                shareCsv(context, "Allerium users.csv", csv)
+            }
+        }
+        JCard {
+            Text("Activity", color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text("${acts.size} activity records", color = Dim, fontSize = 10.sp)
+            RedBtn("Export activity · CSV", icon = Icons.Default.History) {
+                val csv = buildString {
+                    append("time,type,username,details\\n")
+                    acts.forEach { item ->
+                        val values = listOf(item.optLong("time").toString(), item.optString("type"), item.optString("username"), item.optString("message").ifBlank { item.optString("description") })
+                        append(values.joinToString(",") { "\"" + it.replace("\"", "\"\"") + "\"" }); append('\\n')
+                    }
+                }
+                shareCsv(context, "Allerium activity.csv", csv)
+            }
+        }
     }
 }
