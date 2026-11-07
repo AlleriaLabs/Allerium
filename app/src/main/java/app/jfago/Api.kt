@@ -97,10 +97,6 @@ class Api(server: String) {
 
     fun deleteActivity(id: String) { call("DELETE", "/activity/$id") }
 
-    fun announce(ids: List<String>, subject: String, message: String) {
-        call("POST", "/users/announce", JSONObject().put("users", JSONArray(ids)).put("subject", subject).put("message", message))
-    }
-
     fun createUser(name: String, pass: String, email: String, profile: String = "") {
         val o = JSONObject().put("username", name).put("password", pass).put("email", email)
         if (profile.isNotBlank()) o.put("profile", profile)
