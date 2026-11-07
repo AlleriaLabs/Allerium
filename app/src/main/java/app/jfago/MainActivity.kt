@@ -645,6 +645,20 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     var resetMessage by remember { mutableStateOf("") }
     var resetBusy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    DisposableEffect(api, s.url) {
+        val auditStore = ctx.getSharedPreferences("allerium_operations", Context.MODE_PRIVATE)
+        api.auditSink = { method, endpoint, status, success ->
+            synchronized(auditStore) {
+                val key = "audit_${s.url}"
+                val entries = JSONArray(auditStore.getString(key, "[]") ?: "[]")
+                entries.put(JSONObject().put("time", System.currentTimeMillis()).put("method", method)
+                    .put("path", endpoint).put("status", status).put("success", success))
+                while (entries.length() > 500) entries.remove(0)
+                auditStore.edit().putString(key, entries.toString()).apply()
+            }
+        }
+        onDispose { api.auditSink = null }
+    }
     fun refresh() = scope.launch { try { withContext(Dispatchers.IO) { users = api.users(); invites = api.invites(); acts = try { api.activity() } catch (e: Exception) { acts }; profs = try { api.profiles() } catch (e: Exception) { profs } }; msg = "" } catch (e: Exception) { msg = e.message ?: "Error" } }
     fun act(b: () -> Unit) = scope.launch { try { withContext(Dispatchers.IO) { b() } } catch (e: Exception) { msg = e.message ?: "Error" }; refresh() }
     fun exportServerBackup(uri: android.net.Uri?) {
@@ -835,6 +849,11 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                             text = { Text("Diagnostics", color = Color.White) },
                             leadingIcon = { Icon(Icons.Default.Speed, null, tint = Cyan) },
                             onClick = { backupMenuExpanded = false; featureDialog = "diagnostics"; diagnosticChecks = emptyList() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Operations center", color = Color.White) },
+                            leadingIcon = { Icon(Icons.Default.Analytics, null, tint = Cyan) },
+                            onClick = { backupMenuExpanded = false; featureDialog = "operations" }
                         )
                         DropdownMenuItem(
                             text = { Text("Export workspace data", color = Color.White) },
@@ -1308,6 +1327,17 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 }
             }) { Text(if (diagnosticChecks.isEmpty()) "Run diagnostics" else "Run again", color = Red) } },
             dismissButton = { TextButton(enabled = !diagnosticBusy, onClick = { featureDialog = "" }) { Text("Close") } })
+    }
+    if (featureDialog == "operations") {
+        OperationsCenterDialog(
+            api = api,
+            server = s,
+            users = users,
+            invites = invites,
+            activities = acts,
+            onClose = { featureDialog = "" },
+            onLogout = { featureDialog = ""; back() }
+        )
     }
     if (featureDialog == "export") {
         AlertDialog(onDismissRequest = { featureDialog = "" }, containerColor = CardC,
