@@ -577,6 +577,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     var activitySort by remember { mutableStateOf("Newest") }
     var expandedActivity by remember { mutableStateOf("") }
     var featureDialog by remember { mutableStateOf("") }
+    var advancedModulesOpen by remember { mutableStateOf(false) }
     var diagnosticChecks by remember { mutableStateOf<List<DiagnosticCheck>>(emptyList()) }
     var diagnosticBusy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
@@ -639,6 +640,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 TextButton({ featureDialog = "notifications" }) { Icon(Icons.Default.Notifications, null, tint = Cyan); Text("Alerts", color = Color.White) }
                 TextButton({ featureDialog = "diagnostics"; diagnosticChecks = emptyList() }) { Icon(Icons.Default.Speed, null, tint = Cyan); Text("Diagnostics", color = Color.White) }
                 TextButton({ featureDialog = "export" }) { Icon(Icons.Default.FileDownload, null, tint = Cyan); Text("Export", color = Color.White) }
+                TextButton({ advancedModulesOpen = true }) { Icon(Icons.Default.Tune, null, tint = Cyan); Text("All tools", color = Color.White) }
             }
         }
         item {
@@ -866,6 +868,17 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     }
     }
 
+    if (advancedModulesOpen) {
+        AdvancedModulesDialog(
+            api = api,
+            users = users,
+            invites = invites,
+            profiles = profs,
+            onClose = { advancedModulesOpen = false },
+            onRefresh = { refresh() },
+            onMessage = { msg = it }
+        )
+    }
     if (featureDialog == "notifications") {
         AlertDialog(onDismissRequest = { featureDialog = "" }, containerColor = CardC,
             title = { Text("Notification center", color = Color.White) },
