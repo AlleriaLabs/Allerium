@@ -100,6 +100,14 @@ class MainActivity : FragmentActivity() {
 }
 
 data class Srv(val name: String, val url: String, val user: String)
+private data class CenterAlert(
+    val id: String,
+    val title: String,
+    val detail: String,
+    val timestamp: Long,
+    val category: String,
+    val warning: Boolean = false
+)
 
 private fun installCrashDiagnostics(context: Context) {
     val app = context.applicationContext
@@ -610,6 +618,21 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     var activitySort by remember { mutableStateOf("Newest") }
     var expandedActivity by remember { mutableStateOf("") }
     var featureDialog by remember { mutableStateOf("") }
+    var notificationFilter by remember { mutableStateOf("All") }
+    val notificationPrefs = remember(ctx, s.url) {
+        ctx.getSharedPreferences("allerium_notifications", Context.MODE_PRIVATE)
+    }
+    var readNotificationIds by remember(s.url) {
+        mutableStateOf(notificationPrefs.getStringSet("read_${s.url}", emptySet())?.toSet() ?: emptySet())
+    }
+    fun markNotificationRead(id: String) {
+        readNotificationIds = readNotificationIds + id
+        notificationPrefs.edit().putStringSet("read_${s.url}", readNotificationIds).apply()
+    }
+    fun markAllNotificationsRead(ids: List<String>) {
+        readNotificationIds = readNotificationIds + ids
+        notificationPrefs.edit().putStringSet("read_${s.url}", readNotificationIds).apply()
+    }
     var advancedModulesOpen by remember { mutableStateOf(false) }
     var diagnosticChecks by remember { mutableStateOf<List<DiagnosticCheck>>(emptyList()) }
     var diagnosticBusy by remember { mutableStateOf(false) }
@@ -708,7 +731,69 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         "Expiration" -> list.sortedBy { it.optLong("expiry") }
         else -> list.sortedBy { it.optString("name").lowercase() }
     } }
-    val nowSeconds = System.currentTimeMillis() / 1000L
+    val nowMillis = System.currentTimeMillis()
+    val nowSeconds = nowMillis / 1000L
+    val centerAlerts = buildList {
+        users.forEach { user ->
+            val expiry = user.optLong("expiry")
+            if (expiry > 0L) {
+                val expiryMillis = if (expiry > 1_000_000_000_000L) expiry else expiry * 1000L
+                val daysLeft = (expiryMillis - nowMillis) / 86_400_000L
+                if (daysLeft <= 30L) {
+                    val expired = expiryMillis < nowMillis
+                    val username = user.optString("name").ifBlank { "User account" }
+                    add(CenterAlert(
+                        id = "expiry:${user.optString("id")}:$expiry",
+                        title = if (expired) "Account expired" else "Account expiring soon",
+                        detail = if (expired) "$username has passed its expiration date."
+                            else "$username expires in ${daysLeft.coerceAtLeast(0)} day(s).",
+                        timestamp = expiryMillis,
+                        category = "Accounts",
+                        warning = true
+                    ))
+                }
+            }
+        }
+        invites.forEach { invite ->
+            val expiry = invite.optLong("valid_till")
+            if (expiry > 0L) {
+                val expiryMillis = if (expiry > 1_000_000_000_000L) expiry else expiry * 1000L
+                val daysLeft = (expiryMillis - nowMillis) / 86_400_000L
+                if (daysLeft <= 7L) {
+                    val expired = expiryMillis < nowMillis
+                    add(CenterAlert(
+                        id = "invite:${invite.optString("code")}:$expiry",
+                        title = if (expired) "Invitation expired" else "Invitation expiring soon",
+                        detail = "Invitation ${invite.optString("code")} " +
+                            if (expired) "has expired." else "expires in ${daysLeft.coerceAtLeast(0)} day(s).",
+                        timestamp = expiryMillis,
+                        category = "Accounts",
+                        warning = true
+                    ))
+                }
+            }
+        }
+        acts.forEach { event ->
+            val rawTime = event.optLong("time")
+            val eventMillis = if (rawTime > 1_000_000_000_000L) rawTime else rawTime * 1000L
+            if (eventMillis > 0L && nowMillis - eventMillis <= 30L * 86_400_000L) {
+                val type = event.optString("type").ifBlank { "Activity" }
+                val detail = event.optString("message").ifBlank {
+                    event.optString("description").ifBlank { event.optString("username") }
+                }
+                val stable = listOf(type, rawTime.toString(), event.optString("username"),
+                    event.optString("value"), detail).joinToString("|")
+                add(CenterAlert(
+                    id = "activity:${stable.hashCode()}",
+                    title = type.replace('_', ' ').replaceFirstChar { it.uppercase() },
+                    detail = detail.ifBlank { "A server activity event was recorded." },
+                    timestamp = eventMillis,
+                    category = "Activity"
+                ))
+            }
+        }
+    }.sortedByDescending { it.timestamp }
+    val unreadNotificationCount = centerAlerts.count { it.id !in readNotificationIds }
     val activityTypes = acts.map { it.optString("type").ifBlank { "Activity" } }
         .distinct().sorted()
     val filteredActivities = acts.filter { item ->
@@ -741,7 +826,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                     DropdownMenu(expanded = backupMenuExpanded, onDismissRequest = { backupMenuExpanded = false },
                         modifier = Modifier.background(CardC)) {
                         DropdownMenuItem(
-                            text = { Text("Alerts", color = Color.White) },
+                            text = { Text(if (unreadNotificationCount > 0) "Alerts · $unreadNotificationCount new" else "Alerts", color = Color.White) },
                             leadingIcon = { Icon(Icons.Default.Notifications, null, tint = Cyan) },
                             onClick = { backupMenuExpanded = false; featureDialog = "notifications" }
                         )
@@ -1019,26 +1104,104 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         )
     }
     if (featureDialog == "notifications") {
-        AlertDialog(onDismissRequest = { featureDialog = "" }, containerColor = CardC,
-            title = { Text("Notification center", color = Color.White) },
-            text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                Text("Recent events from your JFA-GO activity feed", color = Dim, fontSize = 11.sp)
-                acts.take(25).forEach { event ->
-                    val title = event.optString("type").ifBlank { "Activity" }.replace('_', ' ').replaceFirstChar { it.uppercase() }
-                    val detail = event.optString("message").ifBlank { event.optString("description") }.ifBlank { event.optString("username") }
-                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.Top) {
-                        Icon(Icons.Default.Notifications, null, tint = Cyan, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(10.dp))
-                        Column {
-                            Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                            if (detail.isNotBlank()) Text(detail, color = Dim, fontSize = 10.sp)
+        val visibleAlerts = centerAlerts.filter {
+            notificationFilter == "All" || it.category == notificationFilter
+        }
+        AlertDialog(
+            onDismissRequest = { featureDialog = "" },
+            containerColor = CardC,
+            title = {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Notification center", color = Color.White, modifier = Modifier.weight(1f))
+                        if (unreadNotificationCount > 0) {
+                            Text("$unreadNotificationCount new", color = Cyan, fontSize = 10.sp)
                         }
                     }
-                    Divider(color = Line)
+                    Text("Account alerts and recent server activity", color = Dim, fontSize = 10.sp)
                 }
-                if (acts.isEmpty()) Text("No recent events.", color = Dim)
-            } },
-            confirmButton = { TextButton({ featureDialog = "" }) { Text("Close", color = Red) } })
+            },
+            text = {
+                Column(
+                    Modifier.fillMaxWidth().heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("All", "Accounts", "Activity").forEach { filter ->
+                            FilterChip(
+                                selected = notificationFilter == filter,
+                                onClick = { notificationFilter = filter },
+                                label = { Text(filter, fontSize = 10.sp) }
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+                        TextButton(
+                            enabled = visibleAlerts.any { it.id !in readNotificationIds },
+                            onClick = { markAllNotificationsRead(visibleAlerts.map { it.id }) },
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                        ) { Text("Mark read", color = Cyan, fontSize = 9.sp) }
+                    }
+                    if (visibleAlerts.isEmpty()) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(vertical = 28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(Icons.Default.NotificationsNone, null, tint = Dim, modifier = Modifier.size(30.dp))
+                            Spacer(Modifier.height(8.dp))
+                            Text("You're all caught up", color = Color.White, fontSize = 13.sp)
+                            Text("No matching alerts or recent activity.", color = Dim, fontSize = 10.sp)
+                        }
+                    } else {
+                        visibleAlerts.forEach { alert ->
+                            val unread = alert.id !in readNotificationIds
+                            Row(
+                                Modifier.fillMaxWidth()
+                                    .clip(RoundedCornerShape(13.dp))
+                                    .background(if (unread) PillC else Color.Transparent)
+                                    .clickable { markNotificationRead(alert.id) }
+                                    .padding(11.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Box(
+                                    Modifier.size(32.dp).clip(CircleShape)
+                                        .background(if (alert.warning) Color(0x33FFB547) else Color(0x2239D5F2)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        if (alert.category == "Activity") Icons.Default.History
+                                        else Icons.Default.Schedule,
+                                        null,
+                                        tint = if (alert.warning) Color(0xFFFFB547) else Cyan,
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            alert.title,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 11.sp,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        if (unread) Box(Modifier.size(6.dp).clip(CircleShape).background(Cyan))
+                                    }
+                                    Text(alert.detail, color = Dim, fontSize = 10.sp)
+                                    Text(
+                                        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+                                            .format(Date(alert.timestamp)),
+                                        color = Dim.copy(alpha = .72f),
+                                        fontSize = 9.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton({ featureDialog = "" }) { Text("Done", color = Red) } }
+        )
     }
     if (featureDialog == "diagnostics") {
         val passedChecks = diagnosticChecks.count { it.passed }
