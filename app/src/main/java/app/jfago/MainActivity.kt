@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -112,17 +113,18 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installCrashDiagnostics(applicationContext)
         super.onCreate(savedInstanceState)
-        ReleaseUpdateWorker.schedule(applicationContext)
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
-            !shouldShowRequestPermissionRationale(android.Manifest.permission.POST_NOTIFICATIONS)) {
-            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 7301)
-        }
+        // Replace the old background notification checker with the Allervue-style
+        // in-app update prompt shown when the user opens Allerium.
+        androidx.work.WorkManager.getInstance(applicationContext)
+            .cancelUniqueWork("allerium_github_release_check")
         window.statusBarColor = Bg.toArgb(); window.navigationBarColor = Bg.toArgb()
         val cs = darkColorScheme(primary = Red, background = Bg, surface = Bg, onSurface = Color.White,
             surfaceVariant = CardC, onPrimary = Color.White, secondaryContainer = PillC)
         setContent { MaterialTheme(colorScheme = cs) { Surface(Modifier.fillMaxSize(), color = Bg) {
-            Root(lockRequired = lockRequired, onUnlocked = ::completeAppUnlock)
+            Box(Modifier.fillMaxSize()) {
+                Root(lockRequired = lockRequired, onUnlocked = ::completeAppUnlock)
+                AutomaticUpdatePrompt(enabled = !lockRequired)
+            }
         } } }
     }
 }
