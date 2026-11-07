@@ -284,7 +284,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
             Text("ALLERIUM", color = Color.White, fontSize = 15.sp, letterSpacing = 2.4.sp, fontWeight = FontWeight.Bold)
             Text("ALLERIA LABS", color = Dim, fontSize = 8.sp, letterSpacing = 1.7.sp, fontWeight = FontWeight.Medium)
         }
-        Box(Modifier.size(7.dp).clip(CircleShape).background(Cyan))
+        actions()
     }
     Spacer(Modifier.height(8.dp))
     Text(sub, color = Dim, fontSize = 10.sp, letterSpacing = 0.7.sp, fontWeight = FontWeight.Medium)
