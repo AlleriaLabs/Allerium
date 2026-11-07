@@ -8,6 +8,8 @@ import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -265,6 +267,55 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     val scope = rememberCoroutineScope()
     var authError by remember { mutableStateOf("") }
     var authenticating by remember { mutableStateOf(false) }
+    var backupMessage by remember { mutableStateOf("") }
+    val exportBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) {
+            try {
+                val backup = JSONObject()
+                    .put("format", "allerium-server-backup")
+                    .put("version", 1)
+                    .put("createdAt", System.currentTimeMillis())
+                    .put("servers", JSONArray(servers.map { server ->
+                        JSONObject().put("name", server.name).put("url", server.url).put("user", server.user)
+                    }))
+                val stream = context.contentResolver.openOutputStream(uri)
+                    ?: throw IllegalStateException("Could not open the selected backup destination.")
+                stream.use { it.write(backup.toString(2).toByteArray(Charsets.UTF_8)) }
+                backupMessage = "Backup saved. ${servers.size} server profile(s) exported. Passwords and biometric settings were not included."
+            } catch (e: Exception) {
+                backupMessage = "Backup failed: ${e.message ?: "Unable to write file"}"
+            }
+        }
+    }
+    val importBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            try {
+                val stream = context.contentResolver.openInputStream(uri)
+                    ?: throw IllegalStateException("Could not read the selected backup file.")
+                val raw = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val backup = JSONObject(raw)
+                require(backup.optString("format") == "allerium-server-backup") { "This is not an Allerium server backup." }
+                require(backup.optInt("version", -1) == 1) { "This backup version is not supported." }
+                val saved = backup.optJSONArray("servers") ?: throw IllegalArgumentException("The backup has no server list.")
+                val merged = servers.toMutableList()
+                var added = 0
+                for (i in 0 until saved.length()) {
+                    val item = saved.optJSONObject(i) ?: continue
+                    val name = item.optString("name").trim()
+                    val url = item.optString("url").trim().trimEnd('/')
+                    val user = item.optString("user").trim()
+                    if (name.isBlank() || url.isBlank() || user.isBlank()) continue
+                    if (merged.any { it.url.equals(url, ignoreCase = true) }) continue
+                    merged.add(Srv(name, url, user))
+                    added++
+                }
+                if (added > 0) save(merged)
+                backupMessage = "Restore complete. Added $added server profile(s); existing profiles were kept. Sign in again on restored servers. Passwords and biometric settings must be set up on this device."
+            } catch (e: Exception) {
+                backupMessage = "Restore failed: ${e.message ?: "Invalid backup file"}"
+            }
+        }
+    }
     fun connectWithStoredPassword(s: Srv, password: String) {
         authenticating = true
         scope.launch {
@@ -303,6 +354,47 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 Text("Welcome back", color = Dim, fontSize = 10.sp, letterSpacing = 1.sp)
                 Text("Your servers", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 Text("Manage your JFA-GO workspace.", color = Dim, fontSize = 12.sp)
+            }
+        }
+        item {
+            JCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Backup, null, tint = Cyan, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Server backup", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Save or restore your server connection profiles.", color = Dim, fontSize = 10.sp)
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { exportBackup.launch("Allerium-server-backup.json") },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, Line)
+                    ) {
+                        Icon(Icons.Default.FileDownload, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Create backup", fontSize = 11.sp)
+                    }
+                    OutlinedButton(
+                        onClick = { importBackup.launch(arrayOf("application/json", "text/*")) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, Line)
+                    ) {
+                        Icon(Icons.Default.Restore, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Restore backup", fontSize = 11.sp)
+                    }
+                }
+                if (backupMessage.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(backupMessage, color = Cyan, fontSize = 10.sp)
+                }
+                Text("For safety, backups include server names, URLs and usernames only. Saved passwords and biometric unlock settings are never exported.",
+                    color = Dim, fontSize = 9.sp)
             }
         }
         if (servers.isEmpty()) item {
