@@ -617,6 +617,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     var activityType by remember { mutableStateOf("All types") }
     var activitySort by remember { mutableStateOf("Newest") }
     var expandedActivity by remember { mutableStateOf("") }
+    val ctx = LocalContext.current
     var featureDialog by remember { mutableStateOf("") }
     var notificationFilter by remember { mutableStateOf("All") }
     val notificationPrefs = remember(ctx, s.url) {
@@ -643,7 +644,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     var resetLink by remember { mutableStateOf("") }
     var resetMessage by remember { mutableStateOf("") }
     var resetBusy by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope(); val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     fun refresh() = scope.launch { try { withContext(Dispatchers.IO) { users = api.users(); invites = api.invites(); acts = try { api.activity() } catch (e: Exception) { acts }; profs = try { api.profiles() } catch (e: Exception) { profs } }; msg = "" } catch (e: Exception) { msg = e.message ?: "Error" } }
     fun act(b: () -> Unit) = scope.launch { try { withContext(Dispatchers.IO) { b() } } catch (e: Exception) { msg = e.message ?: "Error" }; refresh() }
     fun exportServerBackup(uri: android.net.Uri?) {
