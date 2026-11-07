@@ -338,9 +338,10 @@ fun AdvancedModulesDialog(
             text = { Text("This permanently deletes ${selectedUsers.size} Jellyfin account(s). This cannot be undone.", color = Dim) },
             confirmButton = {
                 TextButton(enabled = !busy, onClick = {
+                    val idsToDelete = selectedUsers.toList()
                     confirmDelete = false
-                    execute("Selected users deleted") { api.bulkDeleteUsers(selectedUsers.toList()) }
                     selectedUsers.clear()
+                    execute("Selected users deleted") { api.bulkDeleteUsers(idsToDelete) }
                 }) { Text("Delete permanently", color = Color(0xFFFF8585)) }
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
