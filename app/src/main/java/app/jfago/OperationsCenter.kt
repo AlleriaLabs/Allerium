@@ -76,13 +76,14 @@ fun OperationsCenterPage(
         loadBackupHistory()
         try {
             val config = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { api.config() }
-            val sections = config.optJSONArray("sections") ?: JSONArray()
+            val sections = config.optJSONArray("sections") ?: config.optJSONArray("Sections") ?: JSONArray()
             val backupsSection = (0 until sections.length()).mapNotNull { sections.optJSONObject(it) }
-                .firstOrNull { it.optString("section") == "backups" }
-            val settings = backupsSection?.optJSONArray("settings") ?: JSONArray()
+                .firstOrNull { it.optString("section", it.optString("Section")) == "backups" }
+            val settings = backupsSection?.optJSONArray("settings") ?: backupsSection?.optJSONArray("Settings") ?: JSONArray()
             val retentionSetting = (0 until settings.length()).mapNotNull { settings.optJSONObject(it) }
-                .firstOrNull { it.optString("setting") == "keep_n_backups" }
-            backupRetention = retentionSetting?.opt("value")?.toString()?.takeIf { it.isNotBlank() } ?: "20"
+                .firstOrNull { it.optString("setting", it.optString("Setting")) == "keep_n_backups" }
+            backupRetention = retentionSetting?.let { it.opt("value") ?: it.opt("Value") }?.toString()
+                ?.takeIf { it.isNotBlank() } ?: "20"
         } catch (_: Exception) { /* Keep the documented JFA-GO default if config cannot be read. */ }
     }
 
