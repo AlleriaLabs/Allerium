@@ -1,5 +1,7 @@
 package app.jfago
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -10,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -70,6 +73,32 @@ fun AdvancedModulesDialog(
                 feedback = e.message ?: "$labelText failed."
             } finally {
                 busy = false
+            }
+        }
+    }
+
+    val context = LocalContext.current
+    var pendingDownloadName by remember { mutableStateOf("") }
+    val backupDownloadLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        if (uri != null) {
+            val filename = pendingDownloadName
+            execute("Backup downloaded") {
+                val output = context.contentResolver.openOutputStream(uri)
+                    ?: throw IllegalStateException("Could not open the selected destination.")
+                output.use { api.downloadServerBackup(filename, it) }
+            }
+        }
+    }
+    val backupUploadLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            execute("Restore upload submitted") {
+                val input = context.contentResolver.openInputStream(uri)
+                    ?: throw IllegalStateException("Could not read the selected backup.")
+                input.use { api.uploadServerBackup("Allerium-upload.bak", it) }
             }
         }
     }
@@ -253,6 +282,9 @@ fun AdvancedModulesDialog(
                                     finally { busy = false }
                                 }
                             }) { Text("Refresh list", fontSize = 10.sp) }
+                            OutlinedButton(enabled = !busy, onClick = {
+                                backupUploadLauncher.launch(arrayOf("*/*"))
+                            }) { Text("Upload & restore", fontSize = 10.sp) }
                         }
                         backups.forEach { backup ->
                             val name = backup.optString("name")
@@ -261,8 +293,14 @@ fun AdvancedModulesDialog(
                                 Text("Date: " + backup.optLong("date").takeIf { it > 0 }?.let {
                                     DateFormat.getDateTimeInstance().format(Date(it * 1000L))
                                 }.orEmpty() + " · Size: " + backup.optString("size"), color = Dim, fontSize = 9.sp)
-                                OutlinedButton(enabled = !busy && name.isNotBlank(), onClick = { restoreTarget = name }) {
-                                    Text("Restore this backup", color = Color(0xFFFFC36B), fontSize = 10.sp)
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    OutlinedButton(enabled = !busy && name.isNotBlank(), onClick = {
+                                        pendingDownloadName = name
+                                        backupDownloadLauncher.launch(name)
+                                    }) { Text("Download", fontSize = 10.sp) }
+                                    OutlinedButton(enabled = !busy && name.isNotBlank(), onClick = { restoreTarget = name }) {
+                                        Text("Restore", color = Color(0xFFFFC36B), fontSize = 10.sp)
+                                    }
                                 }
                             }
                         }
