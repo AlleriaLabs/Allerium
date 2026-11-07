@@ -119,15 +119,15 @@ class Api(server: String) {
         }
         check("User directory") {
             val count = users().size
-            "$" + count + " user" + if (count == 1) "" else "s" + " returned"
+            count.toString() + " user" + (if (count == 1) "" else "s") + " returned"
         }
         check("Invitations API") {
             val count = invites().size
-            "$" + count + " invitation" + if (count == 1) "" else "s" + " returned"
+            count.toString() + " invitation" + (if (count == 1) "" else "s") + " returned"
         }
         check("Activity feed") {
             val count = activity().size
-            "$" + count + " activity entr" + if (count == 1) "y" else "ies" + " returned"
+            count.toString() + " activity entr" + (if (count == 1) "y" else "ies") + " returned"
         }
         return checks
     }
