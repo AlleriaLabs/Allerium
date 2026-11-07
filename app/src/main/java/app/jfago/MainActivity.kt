@@ -369,7 +369,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
-                        onClick = { exportBackup.launch("Allerium-server-backup.json") },
+                        onClick = { try { exportBackup.launch("Allerium-server-backup.json") } catch (e: Exception) { backupMessage = "Could not open Android save picker: " + (e.message ?: e.javaClass.simpleName) } },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(14.dp),
                         border = BorderStroke(1.dp, Line)
@@ -379,7 +379,7 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                         Text("Create backup", fontSize = 11.sp)
                     }
                     OutlinedButton(
-                        onClick = { importBackup.launch(arrayOf("application/json", "text/*")) },
+                        onClick = { try { importBackup.launch(arrayOf("*/*")) } catch (e: Exception) { backupMessage = "Could not open Android file picker: " + (e.message ?: e.javaClass.simpleName) } },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(14.dp),
                         border = BorderStroke(1.dp, Line)
