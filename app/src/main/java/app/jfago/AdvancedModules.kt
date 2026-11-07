@@ -30,12 +30,13 @@ fun AdvancedModulesPage(
     users: List<JSONObject>,
     invites: List<JSONObject>,
     profiles: List<String>,
+    initialModule: String = "Users",
     onClose: () -> Unit,
     onRefresh: () -> Unit,
     onMessage: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    var module by remember { mutableStateOf("Users") }
+    var module by remember { mutableStateOf(initialModule) }
     var busy by remember { mutableStateOf(false) }
     var feedback by remember { mutableStateOf("") }
     val selectedUsers = remember { mutableStateListOf<String>() }
