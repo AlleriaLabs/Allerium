@@ -3,6 +3,10 @@ package app.jfago
 import android.content.*
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
@@ -61,7 +65,7 @@ val Dim = Color(0xFF9AA8C3)
 val Green = Color(0xFF43D9A3)
 val PillC = Color(0xFF1C2740)
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.statusBarColor = Bg.toArgb(); window.navigationBarColor = Bg.toArgb()
@@ -72,6 +76,60 @@ class MainActivity : ComponentActivity() {
 }
 
 data class Srv(val name: String, val url: String, val user: String)
+
+private fun fragmentActivity(context: Context): FragmentActivity? {
+    var current = context
+    while (current is ContextWrapper) {
+        if (current is FragmentActivity) return current
+        current = current.baseContext
+    }
+    return current as? FragmentActivity
+}
+
+private fun showBiometricPrompt(
+    context: Context,
+    title: String,
+    subtitle: String,
+    onSuccess: () -> Unit,
+    onPasswordFallback: () -> Unit,
+    onError: (String) -> Unit
+) {
+    val activity = fragmentActivity(context)
+    if (activity == null) {
+        onError("Biometric authentication is unavailable in this screen.")
+        return
+    }
+    val capability = BiometricManager.from(context).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+    if (capability != BiometricManager.BIOMETRIC_SUCCESS) {
+        onError(when (capability) {
+            BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> "Enroll a supported fingerprint or face in Android settings first."
+            BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> "This device has no supported strong biometric hardware."
+            BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> "Biometric hardware is temporarily unavailable."
+            else -> "This device does not support strong biometric sign-in."
+        })
+        return
+    }
+    val prompt = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity),
+        object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                onSuccess()
+            }
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON) onPasswordFallback()
+                else onError(errString.toString())
+            }
+            override fun onAuthenticationFailed() {
+                onError("Biometric not recognized. Try again or use your password.")
+            }
+        })
+    val info = BiometricPrompt.PromptInfo.Builder()
+        .setTitle(title)
+        .setSubtitle(subtitle)
+        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+        .setNegativeButtonText("Use password")
+        .build()
+    prompt.authenticate(info)
+}
 
 private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     val masterKey = androidx.security.crypto.MasterKey.Builder(ctx)
@@ -206,22 +264,34 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     val online = remember { mutableStateMapOf<String, Boolean>() }
     val context = LocalContext.current
     val credentials = remember(context) { credentialPrefs(context) }
+    val biometricPrefs = remember(context) { context.getSharedPreferences("allerium_biometric", Context.MODE_PRIVATE) }
     val scope = rememberCoroutineScope()
     var authError by remember { mutableStateOf("") }
     var authenticating by remember { mutableStateOf(false) }
-    fun selectServer(s: Srv) {
-        val stored = credentials.getString(s.url, "").orEmpty()
-        if (stored.isBlank()) { login = s; return }
+    fun connectWithStoredPassword(s: Srv, password: String) {
         authenticating = true
         scope.launch {
             try {
                 val api = Api(s.url)
-                withContext(Dispatchers.IO) { api.login(s.user, stored) }
+                withContext(Dispatchers.IO) { api.login(s.user, password) }
+                authError = ""
                 open(s, api)
             } catch (e: Exception) {
                 authError = e.message ?: "Saved sign-in failed. Please update the password."
                 login = s
             } finally { authenticating = false }
+        }
+    }
+    fun selectServer(s: Srv) {
+        val stored = credentials.getString(s.url, "").orEmpty()
+        if (stored.isBlank()) { login = s; return }
+        if (biometricPrefs.getBoolean(s.url, false)) {
+            showBiometricPrompt(context, "Unlock ${s.name}", "Verify to use your saved JFA-GO credentials",
+                onSuccess = { connectWithStoredPassword(s, stored) },
+                onPasswordFallback = { login = s },
+                onError = { authError = it; login = s })
+        } else {
+            connectWithStoredPassword(s, stored)
         }
     }
     LaunchedEffect(servers) { servers.forEach { s -> launch(Dispatchers.IO) {
@@ -295,6 +365,8 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
         var n by remember { mutableStateOf(old?.name ?: "") }; var u by remember { mutableStateOf(old?.url ?: "https://") }
         var us by remember { mutableStateOf(old?.user ?: "") }
         var pw by remember { mutableStateOf(if (old == null) "" else credentials.getString(old.url, "").orEmpty()) }
+        var biometricEnabled by remember(old?.url) { mutableStateOf(old?.let { biometricPrefs.getBoolean(it.url, false) } ?: false) }
+        var biometricNotice by remember { mutableStateOf("") }
         val close = { adding = false; editing = null }
         AlertDialog(close, containerColor = CardC, title = { Text(if (old == null) "Add server" else "Edit server") },
             text = { Column {
@@ -303,17 +375,45 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
                 Field(us, { us = it }, "Username")
                 Field(pw, { pw = it }, "Password", true)
                 Text("Password is stored encrypted on this device and used for automatic sign-in.", color = Dim, fontSize = 10.sp)
+                if (old != null && credentials.getString(old.url, "").orEmpty().isNotBlank()) {
+                    Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Biometric sign-in", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Require strong fingerprint or face verification before using the saved password.",
+                                color = Dim, fontSize = 9.sp)
+                        }
+                        Switch(checked = biometricEnabled, onCheckedChange = { enable ->
+                            if (!enable) {
+                                biometricEnabled = false
+                                biometricNotice = ""
+                            } else {
+                                showBiometricPrompt(context, "Enable biometric sign-in",
+                                    "Verify your identity to protect this server's saved credentials",
+                                    onSuccess = { biometricEnabled = true; biometricNotice = "Biometric sign-in enabled." },
+                                    onPasswordFallback = { biometricNotice = "Use biometric verification to enable this feature." },
+                                    onError = { biometricNotice = it })
+                            }
+                        })
+                    }
+                    if (biometricNotice.isNotBlank()) Text(biometricNotice, color = Cyan, fontSize = 10.sp)
+                    Text("Only Android strong biometrics are accepted. Some face unlock systems may not qualify. You can always choose password sign-in.",
+                        color = Dim, fontSize = 9.sp)
+                }
             } },
             confirmButton = { TextButton(enabled = n.isNotBlank() && u.isNotBlank() && us.isNotBlank() && (pw.isNotBlank() || old != null),
                 onClick = {
                     val normalized = u.trim().trimEnd('/')
                     val s = Srv(n.trim(), normalized, us.trim())
-                    if (old != null && old.url != normalized) credentials.edit().remove(old.url).apply()
+                    if (old != null && old.url != normalized) {
+                        credentials.edit().remove(old.url).apply()
+                        biometricPrefs.edit().remove(old.url).apply()
+                    }
                     if (pw.isNotBlank()) credentials.edit().putString(normalized, pw).apply()
+                    if (old != null) biometricPrefs.edit().putBoolean(normalized, biometricEnabled).apply()
                     save(if (old == null) servers + s else servers.map { if (it == old) s else it })
                     close()
                 }) { Text("Save", color = Red) } },
-            dismissButton = { Row { if (old != null) TextButton({ credentials.edit().remove(old.url).apply(); save(servers - old); close() }) { Text("Delete", color = Red) }; TextButton(close) { Text("Cancel") } } })
+            dismissButton = { Row { if (old != null) TextButton({ credentials.edit().remove(old.url).apply(); biometricPrefs.edit().remove(old.url).apply(); save(servers - old); close() }) { Text("Delete", color = Red) }; TextButton(close) { Text("Cancel") } } })
     }
     login?.let { s ->
         var pw by remember { mutableStateOf(credentials.getString(s.url, "").orEmpty()) }; var err by remember { mutableStateOf(authError) }; var busy by remember { mutableStateOf(false) }
