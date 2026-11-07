@@ -347,9 +347,12 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
 
 @Composable fun Root(lockRequired: Boolean = false, onUnlocked: () -> Unit = {}) {
     val ctx = LocalContext.current
-    if (lockRequired) {
-        AppLockGate(onUnlocked)
-        return
+    var availableUpdate by remember { mutableStateOf<AlleriumUpdateInfo?>(null) }
+    LaunchedEffect(lockRequired) {
+        if (!lockRequired) {
+            kotlinx.coroutines.delay(2800)
+            availableUpdate = runCatching { AlleriumUpdateChecker.check(ctx) }.getOrNull()
+        }
     }
     val prefs = remember { ctx.getSharedPreferences("jfa", Context.MODE_PRIVATE) }
     fun load(): List<Srv> { val a = JSONArray(prefs.getString("servers", "[]")); return (0 until a.length()).map {
@@ -358,8 +361,22 @@ private fun credentialPrefs(ctx: Context): android.content.SharedPreferences {
     fun save(l: List<Srv>) { servers = l; prefs.edit().putString("servers", JSONArray(l.map {
         JSONObject().put("name", it.name).put("url", it.url).put("user", it.user).put("group", it.group) }).toString()).apply() }
     var session by remember { mutableStateOf<Pair<Srv, Api>?>(null) }
-    session?.let { (s, api) -> Home(s, api, servers, ::save) { session = null }; return }
-    ServerList(servers, ::save) { s, a -> session = s to a }
+    Box(Modifier.fillMaxSize()) {
+        when {
+            lockRequired -> AppLockGate(onUnlocked)
+            session != null -> {
+                val (server, api) = session!!
+                Home(server, api, servers, ::save) { session = null }
+            }
+            else -> ServerList(servers, ::save) { server, api -> session = server to api }
+        }
+        availableUpdate?.let { update ->
+            AlleriumUpdateDialog(update, onDismiss = {
+                AlleriumUpdateChecker.dismiss(ctx, update.tag)
+                availableUpdate = null
+            })
+        }
+    }
 }
 
 @Composable fun ServerList(servers: List<Srv>, save: (List<Srv>) -> Unit, open: (Srv, Api) -> Unit) {
