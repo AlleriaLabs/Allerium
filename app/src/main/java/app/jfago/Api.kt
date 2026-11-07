@@ -45,6 +45,10 @@ class Api(server: String) {
         return (0 until a.length()).map { a.getJSONObject(it) }
     }
 
+    fun adminPasswordReset(id: String): JSONObject {
+        return JSONObject(call("POST", "/users/password-reset", JSONObject().put("users", JSONArray().put(id))))
+    }
+
     fun setEnabled(id: String, enabled: Boolean) {
         call("POST", "/users/enable", JSONObject().put("users", JSONArray().put(id)).put("enabled", enabled).put("notify", false))
     }
